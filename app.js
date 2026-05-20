@@ -1,0 +1,1049 @@
+/* ==========================================================================
+   AeroPrompter - Premium Script Editor & Scrolling Engine
+   ========================================================================== */
+
+// --- Global Application State ---
+const state = {
+  scripts: [],
+  activeScriptId: null,
+  isPlaying: false,
+  scrollMode: 'auto', // 'auto' or 'voice'
+  
+  // High-precision scrolling physics
+  currentScrollY: 0,
+  targetScrollY: 0,
+  lastTime: 0,
+  
+  // Voice engine tracking
+  recognition: null,
+  recognitionActive: false,
+  scriptWords: [],       // Flat array of lowercased words for matching
+  wordElements: [],      // DOM references for highlighting
+  currentWordIndex: 0,
+  speechTimeout: null,
+  
+  // Interface state
+  hudFadeTimeout: null
+};
+
+// --- Default Welcome Scripts for Onboarding ---
+const DEFAULT_SCRIPTS = [
+  {
+    id: 'welcome-script',
+    title: 'Welcome to AeroPrompter 🚀',
+    body: `Welcome to AeroPrompter! This is a state-of-the-art teleprompter designed to run directly in your browser. It features standard Auto-Scroll as well as high-performance, voice-activated scrolling that follows you as you speak.
+
+How to use the Teleprompter:
+1. You can edit this text right now, or click "+ New Script" in the sidebar to write your own speech.
+2. In the right panel, customize your fonts, font sizes, line height, and reading margins to fit your screen.
+3. Check out the "Hardware Rig Control" if you are using physical beamsplitter glass. Mirror Mode will instantly flip the text horizontally so it displays correctly through your glass mirror.
+4. Try toggling "Voice-Activated Scroll". AeroPrompter will listen to your microphone, match what you say with the text, and scroll only when you speak!
+
+Try reading this paragraph out loud:
+"AeroPrompter uses advanced browser recognition. It matches my voice against the script, automatically scrolling to the center of the focus zone. I don't need any clickers, and I don't need to touch my keyboard. If I stop talking to take a breath, the prompter pauses. If I speak faster, the prompter speeds up. It is completely hands-free!"
+
+Keyboard Shortcuts in Prompter Mode:
+• Spacebar: Play / Pause scrolling or voice tracking
+• Up / Down Arrows: Speed up or slow down auto-scrolling
+• G Key: Toggle the glassmorphic focus overlay guides
+• M Key: Mirror text horizontally (Mirror Mode)
+• Escape Key: Exit prompter mode and return to this editor
+
+Click the "Launch Prompter" button in the top right to test it out!`,
+    wpm: 140,
+    fontSize: 40,
+    lineHeight: 1.6,
+    marginWidth: 700,
+    mirrorMode: false,
+    voiceScroll: false,
+    focusOverlay: true,
+    updatedAt: Date.now()
+  },
+  {
+    id: 'short-test',
+    title: 'Quick Speech Demo 🎙️',
+    body: `A quick brown fox jumps over the lazy dog. The sun shines brightly on the mountain tops, and a gentle breeze blows across the green meadows. 
+
+If speech recognition is active, speaking these words aloud will scroll the text smoothly into the highlight guide. This is a perfect test script to see the alignment in action. Enjoy your reading experience!`,
+    wpm: 130,
+    fontSize: 44,
+    lineHeight: 1.7,
+    marginWidth: 650,
+    mirrorMode: false,
+    voiceScroll: true,
+    focusOverlay: true,
+    updatedAt: Date.now()
+  }
+];
+
+// --- DOM Cache Elements ---
+const DOM = {
+  scriptsList: document.getElementById('scripts-list'),
+  btnNewScript: document.getElementById('btn-new-script'),
+  scriptTitleField: document.getElementById('script-title-field'),
+  scriptEditorBody: document.getElementById('script-editor-body'),
+  btnLaunch: document.getElementById('btn-launch'),
+  
+  // Config inputs
+  configVoiceScroll: document.getElementById('config-voice-scroll'),
+  configAutoScroll: document.getElementById('config-auto-scroll'),
+  configWpm: document.getElementById('config-wpm'),
+  configFontFamily: document.getElementById('config-font-family'),
+  configFontSize: document.getElementById('config-font-size'),
+  configLineHeight: document.getElementById('config-line-height'),
+  configMarginWidth: document.getElementById('config-margin-width'),
+  configMirrorMode: document.getElementById('config-mirror-mode'),
+  configFocusOverlay: document.getElementById('config-focus-overlay'),
+  
+  // Displays
+  displayWpm: document.getElementById('display-wpm'),
+  displayFontSize: document.getElementById('display-font-size'),
+  displayLineHeight: document.getElementById('display-line-height'),
+  displayMarginWidth: document.getElementById('display-margin-width'),
+  groupSpeedControl: document.getElementById('group-speed-control'),
+  
+  // Stats
+  statWords: document.getElementById('stat-words'),
+  statChars: document.getElementById('stat-chars'),
+  statTime: document.getElementById('stat-time'),
+  
+  // View Panels
+  dashboardView: document.getElementById('dashboard-view'),
+  prompterView: document.getElementById('prompter-view'),
+  
+  // Prompter layout
+  focusZone: document.getElementById('focus-zone'),
+  prompterViewport: document.getElementById('prompter-viewport'),
+  prompterTextBody: document.getElementById('prompter-text-body'),
+  
+  // HUD Elements
+  hudWrapper: document.getElementById('hud-wrapper'),
+  hudBtnBack: document.getElementById('hud-btn-back'),
+  hudBtnPlay: document.getElementById('hud-btn-play'),
+  hudSvgPlay: document.getElementById('hud-svg-play'),
+  hudSvgPause: document.getElementById('hud-svg-pause'),
+  hudBtnSlower: document.getElementById('hud-btn-slower'),
+  hudBtnFaster: document.getElementById('hud-btn-faster'),
+  hudSpeedText: document.getElementById('hud-speed-text'),
+  hudSpeedWrapper: document.getElementById('hud-speed-wrapper'),
+  hudVoiceIndicator: document.getElementById('hud-voice-indicator'),
+  hudVoiceText: document.getElementById('hud-voice-text'),
+  hudBtnMirror: document.getElementById('hud-btn-mirror'),
+  hudBtnGuides: document.getElementById('hud-btn-guides'),
+  
+  // Toast
+  appToast: document.getElementById('app-toast'),
+  toastMessage: document.getElementById('toast-message')
+};
+
+/* ==========================================================================
+   Core Initialization
+   ========================================================================== */
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadFromLocalStorage();
+  setupEditorListeners();
+  setupPrompterHUDListeners();
+  setupGlobalShortcuts();
+  initSpeechRecognition();
+  
+  // Trigger initial UI sizing update
+  updateStats();
+});
+
+/* ==========================================================================
+   State & LocalStorage Sync
+   ========================================================================== */
+
+function loadFromLocalStorage() {
+  try {
+    const savedScripts = localStorage.getItem('aeroprompter_scripts');
+    const savedActiveId = localStorage.getItem('aeroprompter_active_id');
+    
+    if (savedScripts) {
+      state.scripts = JSON.parse(savedScripts);
+    } else {
+      state.scripts = [...DEFAULT_SCRIPTS];
+      saveToLocalStorage();
+    }
+    
+    if (savedActiveId && state.scripts.find(s => s.id === savedActiveId)) {
+      state.activeScriptId = savedActiveId;
+    } else if (state.scripts.length > 0) {
+      state.activeScriptId = state.scripts[0].id;
+    }
+    
+    renderScriptsSidebar();
+    loadActiveScriptIntoEditor();
+  } catch (e) {
+    console.error('Failed to load from local storage', e);
+    showToast('Failed to load scripts from browser storage.', 'error');
+  }
+}
+
+function saveToLocalStorage() {
+  try {
+    localStorage.setItem('aeroprompter_scripts', JSON.stringify(state.scripts));
+    if (state.activeScriptId) {
+      localStorage.setItem('aeroprompter_active_id', state.activeScriptId);
+    }
+  } catch (e) {
+    console.error('Failed to save to local storage', e);
+  }
+}
+
+function getActiveScript() {
+  return state.scripts.find(s => s.id === state.activeScriptId);
+}
+
+/* ==========================================================================
+   Editor Panel Controller
+   ========================================================================== */
+
+function renderScriptsSidebar() {
+  DOM.scriptsList.innerHTML = '';
+  
+  // Sort scripts by last modification date
+  const sorted = [...state.scripts].sort((a, b) => b.updatedAt - a.updatedAt);
+  
+  sorted.forEach(script => {
+    const item = document.createElement('div');
+    item.className = `script-item ${script.id === state.activeScriptId ? 'active' : ''}`;
+    item.dataset.id = script.id;
+    
+    const info = document.createElement('div');
+    info.className = 'script-info';
+    
+    const title = document.createElement('div');
+    title.className = 'script-title';
+    title.textContent = script.title || 'Untitled Script';
+    
+    const wordsCount = script.body ? script.body.trim().split(/\s+/).filter(Boolean).length : 0;
+    const meta = document.createElement('div');
+    meta.className = 'script-meta';
+    meta.textContent = `${wordsCount} words • ${calculateReadingTime(wordsCount, script.wpm).min}m read`;
+    
+    info.appendChild(title);
+    info.appendChild(meta);
+    item.appendChild(info);
+    
+    // Delete Button
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn-delete';
+    delBtn.title = 'Delete Script';
+    delBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="3 6 5 6 21 6"></polyline>
+        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      </svg>
+    `;
+    
+    delBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deleteScript(script.id);
+    });
+    
+    item.appendChild(delBtn);
+    
+    item.addEventListener('click', () => {
+      selectScript(script.id);
+    });
+    
+    DOM.scriptsList.appendChild(item);
+  });
+}
+
+function loadActiveScriptIntoEditor() {
+  const script = getActiveScript();
+  if (!script) return;
+  
+  // Set text fields
+  DOM.scriptTitleField.value = script.title;
+  DOM.scriptEditorBody.value = script.body;
+  
+  // Set configurations
+  DOM.configWpm.value = script.wpm;
+  DOM.displayWpm.textContent = `${script.wpm} WPM`;
+  
+  DOM.configFontFamily.value = script.fontSize ? (script.fontFamily || 'sans') : 'sans';
+  DOM.configFontSize.value = script.fontSize || 42;
+  DOM.displayFontSize.textContent = `${DOM.configFontSize.value}px`;
+  
+  DOM.configLineHeight.value = script.lineHeight || 1.6;
+  DOM.displayLineHeight.textContent = `${DOM.configLineHeight.value}x`;
+  
+  DOM.configMarginWidth.value = script.marginWidth || 700;
+  DOM.displayMarginWidth.textContent = `${DOM.configMarginWidth.value}px`;
+  
+  DOM.configMirrorMode.checked = !!script.mirrorMode;
+  DOM.configFocusOverlay.checked = script.focusOverlay !== false;
+  
+  // Set Scroll Modes
+  const isVoice = !!script.voiceScroll;
+  DOM.configVoiceScroll.checked = isVoice;
+  DOM.configAutoScroll.checked = !isVoice;
+  
+  toggleScrollModeUI(isVoice);
+  updateStats();
+}
+
+function selectScript(id) {
+  state.activeScriptId = id;
+  renderScriptsSidebar();
+  loadActiveScriptIntoEditor();
+  saveToLocalStorage();
+}
+
+function createNewScript() {
+  const newId = 'script_' + Date.now();
+  const newScript = {
+    id: newId,
+    title: 'Untitled Script',
+    body: '',
+    wpm: 130,
+    fontSize: 42,
+    lineHeight: 1.6,
+    marginWidth: 700,
+    mirrorMode: false,
+    voiceScroll: false,
+    focusOverlay: true,
+    fontFamily: 'sans',
+    updatedAt: Date.now()
+  };
+  
+  state.scripts.unshift(newScript);
+  state.activeScriptId = newId;
+  
+  renderScriptsSidebar();
+  loadActiveScriptIntoEditor();
+  saveToLocalStorage();
+  
+  DOM.scriptTitleField.focus();
+  DOM.scriptTitleField.select();
+  showToast('New script created.', 'success');
+}
+
+function deleteScript(id) {
+  const index = state.scripts.findIndex(s => s.id === id);
+  if (index === -1) return;
+  
+  // Confirm deletion
+  if (state.scripts.length === 1) {
+    showToast('You must keep at least one script.', 'error');
+    return;
+  }
+  
+  const title = state.scripts[index].title;
+  if (!confirm(`Are you sure you want to delete "${title}"?`)) return;
+  
+  state.scripts.splice(index, 1);
+  
+  if (state.activeScriptId === id) {
+    state.activeScriptId = state.scripts[0].id;
+  }
+  
+  renderScriptsSidebar();
+  loadActiveScriptIntoEditor();
+  saveToLocalStorage();
+  showToast('Script deleted.', 'success');
+}
+
+function updateActiveScriptState(field, value) {
+  const script = getActiveScript();
+  if (!script) return;
+  
+  script[field] = value;
+  script.updatedAt = Date.now();
+  
+  // Debounced update to sidebar to avoid performance hits
+  if (field === 'title' || field === 'body' || field === 'wpm') {
+    renderScriptsSidebar();
+  }
+  saveToLocalStorage();
+}
+
+function toggleScrollModeUI(isVoiceActive) {
+  if (isVoiceActive) {
+    DOM.groupSpeedControl.style.opacity = '0.35';
+    DOM.groupSpeedControl.style.pointerEvents = 'none';
+  } else {
+    DOM.groupSpeedControl.style.opacity = '1';
+    DOM.groupSpeedControl.style.pointerEvents = 'auto';
+  }
+}
+
+/* ==========================================================================
+   Statistics Calculations
+   ========================================================================== */
+
+function calculateReadingTime(wordsCount, wpm) {
+  const speed = parseInt(wpm) || 130;
+  const totalSeconds = Math.ceil((wordsCount / speed) * 60);
+  const min = Math.floor(totalSeconds / 60);
+  const sec = totalSeconds % 60;
+  return { min, sec };
+}
+
+function updateStats() {
+  const text = DOM.scriptEditorBody.value || '';
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  const wordsCount = words.length;
+  const charsCount = text.length;
+  
+  DOM.statWords.textContent = wordsCount;
+  DOM.statChars.textContent = charsCount;
+  
+  const wpm = DOM.configWpm.value;
+  const time = calculateReadingTime(wordsCount, wpm);
+  DOM.statTime.textContent = `${time.min}m ${time.sec}s`;
+}
+
+/* ==========================================================================
+   Settings Listeners
+   ========================================================================== */
+
+function setupEditorListeners() {
+  // Sidebar actions
+  DOM.btnNewScript.addEventListener('click', createNewScript);
+  
+  // Editor changes
+  DOM.scriptTitleField.addEventListener('input', () => {
+    updateActiveScriptState('title', DOM.scriptTitleField.value);
+  });
+  
+  DOM.scriptEditorBody.addEventListener('input', () => {
+    updateActiveScriptState('body', DOM.scriptEditorBody.value);
+    updateStats();
+  });
+  
+  // Dynamic Range slider displays
+  DOM.configWpm.addEventListener('input', () => {
+    const val = DOM.configWpm.value;
+    DOM.displayWpm.textContent = `${val} WPM`;
+    updateActiveScriptState('wpm', parseInt(val));
+    updateStats();
+  });
+  
+  DOM.configFontSize.addEventListener('input', () => {
+    const val = DOM.configFontSize.value;
+    DOM.displayFontSize.textContent = `${val}px`;
+    updateActiveScriptState('fontSize', parseInt(val));
+  });
+  
+  DOM.configLineHeight.addEventListener('input', () => {
+    const val = DOM.configLineHeight.value;
+    DOM.displayLineHeight.textContent = `${val}x`;
+    updateActiveScriptState('lineHeight', parseFloat(val));
+  });
+  
+  DOM.configMarginWidth.addEventListener('input', () => {
+    const val = DOM.configMarginWidth.value;
+    DOM.displayMarginWidth.textContent = `${val}px`;
+    updateActiveScriptState('marginWidth', parseInt(val));
+  });
+
+  DOM.configFontFamily.addEventListener('change', () => {
+    updateActiveScriptState('fontFamily', DOM.configFontFamily.value);
+  });
+  
+  // Switches toggles
+  DOM.configMirrorMode.addEventListener('change', () => {
+    updateActiveScriptState('mirrorMode', DOM.configMirrorMode.checked);
+  });
+  
+  DOM.configFocusOverlay.addEventListener('change', () => {
+    updateActiveScriptState('focusOverlay', DOM.configFocusOverlay.checked);
+  });
+  
+  // Handle Mutually Exclusive Scroll Modes
+  DOM.configVoiceScroll.addEventListener('change', () => {
+    const isVoice = DOM.configVoiceScroll.checked;
+    DOM.configAutoScroll.checked = !isVoice;
+    toggleScrollModeUI(isVoice);
+    updateActiveScriptState('voiceScroll', isVoice);
+  });
+  
+  DOM.configAutoScroll.addEventListener('change', () => {
+    const isAuto = DOM.configAutoScroll.checked;
+    DOM.configVoiceScroll.checked = !isAuto;
+    toggleScrollModeUI(!isAuto);
+    updateActiveScriptState('voiceScroll', !isAuto);
+  });
+  
+  // LAUNCH TELEPROMPTER
+  DOM.btnLaunch.addEventListener('click', launchTeleprompter);
+}
+
+/* ==========================================================================
+   HUD Controllers & Events
+   ========================================================================== */
+
+function setupPrompterHUDListeners() {
+  DOM.hudBtnBack.addEventListener('click', exitTeleprompter);
+  
+  DOM.hudBtnPlay.addEventListener('click', togglePlayback);
+  
+  DOM.hudBtnSlower.addEventListener('click', () => adjustWpm(-5));
+  DOM.hudBtnFaster.addEventListener('click', () => adjustWpm(5));
+  
+  DOM.hudBtnMirror.addEventListener('click', () => {
+    const flipped = DOM.prompterTextBody.classList.toggle('flipped');
+    DOM.hudBtnMirror.classList.toggle('active', flipped);
+    
+    // Synced configuration back
+    DOM.configMirrorMode.checked = flipped;
+    updateActiveScriptState('mirrorMode', flipped);
+    
+    // Layout might shift, recalculate positions
+    setTimeout(calculateWordOffsets, 100);
+    showToast(flipped ? 'Mirror Mode Active' : 'Mirror Mode Disabled');
+  });
+  
+  DOM.hudBtnGuides.addEventListener('click', () => {
+    const visible = DOM.focusZone.classList.toggle('visible');
+    DOM.hudBtnGuides.classList.toggle('active', visible);
+    
+    DOM.configFocusOverlay.checked = visible;
+    updateActiveScriptState('focusOverlay', visible);
+    showToast(visible ? 'Focus Guides Visible' : 'Focus Guides Hidden');
+  });
+  
+  // Track scroll activity to auto-hide HUD and sync manual viewport scrolling
+  DOM.prompterViewport.addEventListener('scroll', handleViewportScroll);
+  DOM.prompterViewport.addEventListener('mousemove', triggerHUDVisibility);
+  DOM.prompterViewport.addEventListener('touchstart', triggerHUDVisibility);
+}
+
+function triggerHUDVisibility() {
+  DOM.hudWrapper.classList.remove('fade-out');
+  clearTimeout(state.hudFadeTimeout);
+  
+  // Hide HUD controls after 3 seconds of inactivity if actively playing
+  if (state.isPlaying) {
+    state.hudFadeTimeout = setTimeout(() => {
+      DOM.hudWrapper.classList.add('fade-out');
+    }, 3000);
+  }
+}
+
+function handleViewportScroll() {
+  // If the user manually scrolls, synchronize our physics variables to avoid jumping stutters
+  if (!state.isPlaying || state.scrollMode === 'voice') {
+    state.currentScrollY = DOM.prompterViewport.scrollTop;
+    state.targetScrollY = DOM.prompterViewport.scrollTop;
+  }
+}
+
+function adjustWpm(delta) {
+  const script = getActiveScript();
+  if (!script) return;
+  
+  let newWpm = parseInt(DOM.configWpm.value) + delta;
+  newWpm = Math.max(50, Math.min(300, newWpm));
+  
+  DOM.configWpm.value = newWpm;
+  DOM.displayWpm.textContent = `${newWpm} WPM`;
+  DOM.hudSpeedText.textContent = `${newWpm} WPM`;
+  
+  updateActiveScriptState('wpm', newWpm);
+  updateStats();
+  
+  showToast(`Speed: ${newWpm} WPM`);
+}
+
+function setupGlobalShortcuts() {
+  window.addEventListener('keydown', (e) => {
+    // Only capture keys if prompter is active
+    if (!DOM.prompterView.classList.contains('active')) return;
+    
+    switch (e.code) {
+      case 'Space':
+        e.preventDefault();
+        togglePlayback();
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        adjustWpm(5);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        adjustWpm(-5);
+        break;
+      case 'KeyM':
+        DOM.hudBtnMirror.click();
+        break;
+      case 'KeyG':
+        DOM.hudBtnGuides.click();
+        break;
+      case 'Escape':
+        e.preventDefault();
+        exitTeleprompter();
+        break;
+    }
+  });
+}
+
+/* ==========================================================================
+   Teleprompter Launcher & UI Setup
+   ========================================================================== */
+
+function launchTeleprompter() {
+  const script = getActiveScript();
+  if (!script || !script.body.trim()) {
+    showToast('Please type some script text first!', 'error');
+    return;
+  }
+  
+  // 1. Setup UI configurations from active script settings
+  applyPromptSizingConfigs(script);
+  
+  // 2. Tokenize editor content
+  tokenizeScriptText(script.body);
+  
+  // 3. Toggle View states
+  DOM.dashboardView.classList.add('hidden');
+  DOM.dashboardView.classList.remove('active');
+  DOM.prompterView.classList.add('active');
+  
+  // Reset scroll metrics
+  DOM.prompterViewport.scrollTop = 0;
+  state.currentScrollY = 0;
+  state.targetScrollY = 0;
+  state.currentWordIndex = 0;
+  
+  // Calculate offsets for precise LERP/Voice tracking
+  setTimeout(() => {
+    calculateWordOffsets();
+  }, 300);
+  
+  // 4. Start appropriate engine
+  state.scrollMode = script.voiceScroll ? 'voice' : 'auto';
+  state.isPlaying = true;
+  
+  updateHUDButtonState();
+  triggerHUDVisibility();
+  
+  if (state.scrollMode === 'voice') {
+    startVoiceEngine();
+  } else {
+    // Start RAF frame ticker for Auto-Scroll
+    state.lastTime = performance.now();
+    requestAnimationFrame(renderAutoScrollTicker);
+    showToast('Auto-Scroll Active (Space to Pause)');
+  }
+}
+
+function exitTeleprompter() {
+  // Stop engines
+  state.isPlaying = false;
+  stopVoiceEngine();
+  
+  // Switch Views
+  DOM.prompterView.classList.remove('active');
+  DOM.dashboardView.classList.add('active');
+  DOM.dashboardView.classList.remove('hidden');
+  
+  showToast('Back to editor mode.');
+}
+
+function togglePlayback() {
+  state.isPlaying = !state.isPlaying;
+  updateHUDButtonState();
+  triggerHUDVisibility();
+  
+  if (state.isPlaying) {
+    showToast(state.scrollMode === 'voice' ? 'Listening...' : 'Scrolling Resumed');
+    
+    if (state.scrollMode === 'voice') {
+      startVoiceEngine();
+    } else {
+      state.lastTime = performance.now();
+      requestAnimationFrame(renderAutoScrollTicker);
+    }
+  } else {
+    showToast('Paused');
+    stopVoiceEngine();
+  }
+}
+
+function updateHUDButtonState() {
+  if (state.isPlaying) {
+    DOM.hudBtnPlay.classList.add('active');
+    DOM.hudSvgPlay.style.display = 'none';
+    DOM.hudSvgPause.style.display = 'block';
+  } else {
+    DOM.hudBtnPlay.classList.remove('active');
+    DOM.hudSvgPlay.style.display = 'block';
+    DOM.hudSvgPause.style.display = 'none';
+  }
+}
+
+function applyPromptSizingConfigs(script) {
+  // Clear layout properties
+  DOM.prompterTextBody.className = 'prompter-text-body';
+  DOM.prompterTextBody.classList.add(`prompter-font-${script.fontFamily || 'sans'}`);
+  
+  if (script.mirrorMode) {
+    DOM.prompterTextBody.classList.add('flipped');
+    DOM.hudBtnMirror.classList.add('active');
+  } else {
+    DOM.hudBtnMirror.classList.remove('active');
+  }
+  
+  DOM.focusZone.classList.toggle('visible', script.focusOverlay !== false);
+  DOM.hudBtnGuides.classList.toggle('active', script.focusOverlay !== false);
+  
+  // CSS dimensions applied
+  DOM.prompterTextBody.style.fontSize = `${script.fontSize || 42}px`;
+  DOM.prompterTextBody.style.lineHeight = `${script.lineHeight || 1.6}`;
+  DOM.prompterTextBody.style.maxWidth = `${script.marginWidth || 700}px`;
+  
+  // Sync Speed HUD
+  DOM.hudSpeedText.textContent = `${script.wpm} WPM`;
+  if (script.voiceScroll) {
+    DOM.hudSpeedWrapper.style.display = 'none';
+  } else {
+    DOM.hudSpeedWrapper.style.display = 'flex';
+  }
+}
+
+/* ==========================================================================
+   Word Tokenization
+   ========================================================================== */
+
+function tokenizeScriptText(text) {
+  DOM.prompterTextBody.innerHTML = '';
+  state.scriptWords = [];
+  state.wordElements = [];
+  
+  const paragraphs = text.split(/\n+/).filter(p => p.trim());
+  let wordIndex = 0;
+  
+  paragraphs.forEach(paraText => {
+    const paraEl = document.createElement('div');
+    paraEl.className = 'prompter-paragraph';
+    
+    // Split into words while retaining spacing
+    const rawWords = paraText.split(/(\s+)/);
+    
+    rawWords.forEach(segment => {
+      if (segment.trim().length === 0) {
+        // Just text spaces
+        paraEl.appendChild(document.createTextNode(segment));
+      } else {
+        // Actual word token
+        const wordClean = cleanWordText(segment);
+        
+        const span = document.createElement('span');
+        span.className = 'prompter-word';
+        span.textContent = segment;
+        span.dataset.wordIndex = wordIndex;
+        
+        paraEl.appendChild(span);
+        
+        state.scriptWords.push(wordClean);
+        state.wordElements.push(span);
+        
+        wordIndex++;
+      }
+    });
+    
+    DOM.prompterTextBody.appendChild(paraEl);
+  });
+}
+
+function cleanWordText(word) {
+  // Lowercase and strip typical non-phonetic punctuation marks
+  return word.toLowerCase()
+             .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"'🎙️🚀🎙️]/g, "")
+             .trim();
+}
+
+function calculateWordOffsets() {
+  if (state.wordElements.length === 0) return;
+  
+  // Cache word coordinates in memory for highly optimized reading loops
+  state.wordOffsets = state.wordElements.map(el => {
+    return {
+      top: el.offsetTop,
+      height: el.clientHeight,
+      paragraph: el.closest('.prompter-paragraph')
+    };
+  });
+}
+
+/* ==========================================================================
+   Smooth Auto-Scroll Physics Ticker (RAF Loop)
+   ========================================================================== */
+
+function renderAutoScrollTicker(timestamp) {
+  if (!state.isPlaying || state.scrollMode !== 'auto') return;
+  
+  const elapsed = (timestamp - state.lastTime) / 1000;
+  state.lastTime = timestamp;
+  
+  // Don't step frame if excessive (e.g. background tab tab sleep wake)
+  if (elapsed < 0.1) {
+    const script = getActiveScript();
+    const wpm = script ? script.wpm : 130;
+    const fontSize = script ? script.fontSize : 42;
+    const lineHeight = script ? script.lineHeight : 1.6;
+    
+    // Professional scaling WPM to screen pixel speed relative to sizes
+    // Large font size scrolls faster in pixels/sec to maintain identical verbal speed rates
+    const verbalSizeMultiplier = fontSize * lineHeight * 0.72;
+    const pixelsPerSecond = (wpm / 60) * verbalSizeMultiplier;
+    
+    state.targetScrollY += pixelsPerSecond * elapsed;
+    
+    // LERP transition for ultra smooth, non-choppy tracking
+    state.currentScrollY += (state.targetScrollY - state.currentScrollY) * 0.12;
+    
+    DOM.prompterViewport.scrollTop = Math.round(state.currentScrollY);
+    
+    // Identify and highlight active reading paragraphs based on scroll viewport position
+    highlightActiveWordByScrollPosition();
+  } else {
+    state.lastTime = timestamp;
+  }
+  
+  requestAnimationFrame(renderAutoScrollTicker);
+}
+
+function highlightActiveWordByScrollPosition() {
+  if (state.wordOffsets.length === 0) return;
+  
+  // Highlight the paragraph that lies in the center vertical line
+  const viewportCenter = DOM.prompterViewport.scrollTop + (DOM.prompterViewport.clientHeight / 2);
+  
+  let closestIndex = 0;
+  let minDiff = Infinity;
+  
+  state.wordOffsets.forEach((offset, idx) => {
+    const diff = Math.abs(offset.top - viewportCenter);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closestIndex = idx;
+    }
+  });
+  
+  // Reset previous paragraph active highlights
+  state.wordElements.forEach(el => {
+    el.closest('.prompter-paragraph').classList.remove('active-paragraph');
+    el.classList.remove('current-word');
+  });
+  
+  // Activate target
+  const activeWordEl = state.wordElements[closestIndex];
+  if (activeWordEl) {
+    const activePara = activeWordEl.closest('.prompter-paragraph');
+    activePara.classList.add('active-paragraph');
+    activeWordEl.classList.add('current-word');
+  }
+}
+
+/* ==========================================================================
+   Voice Scroll Speech Recognition Core
+   ========================================================================== */
+
+function initSpeechRecognition() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  
+  if (!SpeechRecognition) {
+    console.warn("Speech Recognition API is not supported in this browser.");
+    DOM.configVoiceScroll.disabled = true;
+    DOM.configVoiceScroll.checked = false;
+    DOM.containerVoiceScroll.style.opacity = '0.4';
+    DOM.containerVoiceScroll.querySelector('.helper-text').textContent = 'Microphone speech tracking not supported in this browser. (Use Chrome or Safari)';
+    return;
+  }
+  
+  const rec = new SpeechRecognition();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = 'en-US';
+  
+  rec.onstart = () => {
+    state.recognitionActive = true;
+    DOM.hudVoiceIndicator.classList.add('listening');
+    DOM.hudVoiceText.textContent = 'Listening...';
+    showToast('Microphone Active. Speak script aloud.', 'success');
+  };
+  
+  rec.onerror = (event) => {
+    console.error('Speech Recognition Error', event.error);
+    if (event.error === 'not-allowed') {
+      showToast('Microphone access denied. Enable mic permissions.', 'error');
+      stopVoiceEngine();
+    } else if (event.error === 'network') {
+      showToast('Speech Recognition requires an internet connection.', 'error');
+    }
+  };
+  
+  rec.onend = () => {
+    state.recognitionActive = false;
+    DOM.hudVoiceIndicator.classList.remove('listening');
+    DOM.hudVoiceText.textContent = 'Voice Scroll Off';
+    
+    // Auto restart if still actively playing and voice scroll is active
+    if (state.isPlaying && state.scrollMode === 'voice') {
+      console.log('Voice recognition stopped unexpectedly, restarting...');
+      try {
+        state.recognition.start();
+      } catch (err) {
+        console.error('Failed to restart speech engine', err);
+      }
+    }
+  };
+  
+  rec.onresult = (event) => {
+    if (!state.isPlaying || state.scrollMode !== 'voice') return;
+    
+    // Process results
+    let phrase = "";
+    
+    // Get the most recent transcription strings
+    for (let i = event.resultIndex; i < event.results.length; ++i) {
+      phrase += event.results[i][0].transcript;
+    }
+    
+    processSpokenPhrase(phrase);
+  };
+  
+  state.recognition = rec;
+}
+
+function startVoiceEngine() {
+  if (!state.recognition) {
+    showToast('Speech recognition not supported.', 'error');
+    state.scrollMode = 'auto';
+    state.isPlaying = true;
+    updateHUDButtonState();
+    DOM.configAutoScroll.checked = true;
+    DOM.configVoiceScroll.checked = false;
+    requestAnimationFrame(renderAutoScrollTicker);
+    return;
+  }
+  
+  DOM.hudVoiceIndicator.style.display = 'flex';
+  DOM.hudVoiceText.textContent = 'Activating...';
+  
+  try {
+    state.recognition.start();
+    // Run background interpolation loop for scrolling to target index Y smoothly
+    requestAnimationFrame(renderVoiceScrollTicker);
+  } catch (err) {
+    console.error('Voice engine start error', err);
+  }
+}
+
+function stopVoiceEngine() {
+  if (state.recognition && state.recognitionActive) {
+    state.recognition.stop();
+  }
+  DOM.hudVoiceIndicator.classList.remove('listening');
+  DOM.hudVoiceText.textContent = 'Voice Scroll Off';
+}
+
+function processSpokenPhrase(spokenText) {
+  if (state.scriptWords.length === 0) return;
+  
+  const spokenWords = spokenText.trim().toLowerCase().split(/\s+/).map(cleanWordText).filter(Boolean);
+  if (spokenWords.length === 0) return;
+  
+  // Fuzzy Sliding Window Matcher
+  // Look forward from our current index to find matching script words
+  const startIndex = state.currentWordIndex;
+  const lookAheadWindow = 35; // Maximum index search buffer
+  const maxIndex = Math.min(state.scriptWords.length, startIndex + lookAheadWindow);
+  
+  let bestMatchIndex = -1;
+  let maxScore = 0;
+  
+  // We compare the spoken phrase against subsegments of the script
+  for (let s = startIndex; s < maxIndex; s++) {
+    let score = 0;
+    
+    // Simple lookahead match score
+    for (let w = 0; w < Math.min(spokenWords.length, 5); w++) {
+      const spoke = spokenWords[spokenWords.length - 1 - w]; // Read spoken words from right to left
+      const scriptWord = state.scriptWords[s - w];
+      
+      if (spoke && scriptWord && spoke === scriptWord) {
+        score += (5 - w); // Higher score for match of more recent spoken words
+      }
+    }
+    
+    if (score > maxScore) {
+      maxScore = score;
+      bestMatchIndex = s;
+    }
+  }
+  
+  // If we have a reasonably confident match, advance the prompter
+  if (bestMatchIndex !== -1 && bestMatchIndex >= state.currentWordIndex) {
+    scrollToWordIndex(bestMatchIndex);
+  }
+}
+
+function scrollToWordIndex(index) {
+  state.currentWordIndex = index;
+  
+  // Highlight elements
+  state.wordElements.forEach((el, idx) => {
+    const para = el.closest('.prompter-paragraph');
+    
+    if (idx < index) {
+      el.classList.add('spoken');
+      el.classList.remove('current-word');
+      para.classList.remove('active-paragraph');
+    } else if (idx === index) {
+      el.classList.remove('spoken');
+      el.classList.add('current-word');
+      para.classList.add('active-paragraph');
+      
+      // Compute target Y coordinate to position active word vertically centered in the focus overlay zone
+      const wordOffset = state.wordOffsets[idx];
+      if (wordOffset) {
+        const viewportHeight = DOM.prompterViewport.clientHeight;
+        // Center of viewport scroll position target
+        state.targetScrollY = wordOffset.top - (viewportHeight / 2) + (wordOffset.height / 2);
+      }
+    } else {
+      el.classList.remove('spoken', 'current-word');
+      para.classList.remove('active-paragraph');
+    }
+  });
+}
+
+function renderVoiceScrollTicker() {
+  if (!state.isPlaying || state.scrollMode !== 'voice') return;
+  
+  // Gently slide the viewport scroll position towards the target vertical Y coordinate
+  const diff = state.targetScrollY - state.currentScrollY;
+  
+  if (Math.abs(diff) > 0.5) {
+    // Elegant proportional LERP interpolation
+    state.currentScrollY += diff * 0.08;
+    DOM.prompterViewport.scrollTop = Math.round(state.currentScrollY);
+  }
+  
+  requestAnimationFrame(renderVoiceScrollTicker);
+}
+
+/* ==========================================================================
+   UI Toast Notification System
+   ========================================================================== */
+
+function showToast(message, type = 'success') {
+  DOM.appToast.className = 'toast';
+  DOM.appToast.classList.add(`toast-${type}`);
+  DOM.toastMessage.textContent = message;
+  
+  DOM.appToast.classList.add('show');
+  
+  clearTimeout(state.toastTimeout);
+  state.toastTimeout = setTimeout(() => {
+    DOM.appToast.classList.remove('show');
+  }, 2500);
+}
