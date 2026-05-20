@@ -69,8 +69,11 @@
             </div>
           </section>
           
+          <!-- Drag-to-resize handle -->
+          <div class="config-resize-handle" id="config-resize-handle"></div>
+
           <!-- Configuration Panel -->
-          <aside class="config-panel">
+          <aside class="config-panel" id="config-panel">
             <div>
               <div class="section-title">Scroll Mode</div>
               <div class="control-group">
@@ -89,6 +92,17 @@
                   <span class="control-label">Auto-Scroll</span>
                   <label class="switch">
                     <input type="checkbox" id="config-auto-scroll" checked>
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="switch-container" id="container-auto-start" style="margin-top: 8px;">
+                  <span class="control-label">
+                    Start Immediately
+                    <span class="helper-text" style="display:block;">Begins scrolling as soon as prompter opens.</span>
+                  </span>
+                  <label class="switch">
+                    <input type="checkbox" id="config-auto-start" checked>
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -204,7 +218,14 @@
               <path d="M19 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H19v-2z"/>
             </svg>
           </button>
-          
+
+          <!-- Restart from beginning button -->
+          <button id="hud-btn-restart" class="hud-btn" title="Restart from Beginning (R)">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+            </svg>
+          </button>
+
           <div class="hud-divider"></div>
           
           <!-- Play / Pause button -->

@@ -94,6 +94,7 @@ const DOM = {
   configMarginWidth: document.getElementById('config-margin-width'),
   configMirrorMode: document.getElementById('config-mirror-mode'),
   configFocusOverlay: document.getElementById('config-focus-overlay'),
+  configAutoStart: document.getElementById('config-auto-start'),
   
   // Displays
   displayWpm: document.getElementById('display-wpm'),
@@ -133,6 +134,7 @@ const DOM = {
   hudVoiceText: document.getElementById('hud-voice-text'),
   hudBtnMirror: document.getElementById('hud-btn-mirror'),
   hudBtnGuides: document.getElementById('hud-btn-guides'),
+  hudBtnRestart: document.getElementById('hud-btn-restart'),
   
   // Toast
   appToast: document.getElementById('app-toast'),
@@ -148,8 +150,9 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEditorListeners();
   setupPrompterHUDListeners();
   setupGlobalShortcuts();
+  setupPanelResize();
   initSpeechRecognition();
-  
+
   // Trigger initial UI sizing update
   updateStats();
 });
@@ -511,7 +514,8 @@ function setupEditorListeners() {
 
 function setupPrompterHUDListeners() {
   DOM.hudBtnBack.addEventListener('click', exitTeleprompter);
-  
+  DOM.hudBtnRestart.addEventListener('click', restartTeleprompter);
+
   DOM.hudBtnPlay.addEventListener('click', togglePlayback);
   
   DOM.hudBtnSlower.addEventListener('click', () => adjustWpm(-5));
@@ -601,6 +605,9 @@ function setupGlobalShortcuts() {
         e.preventDefault();
         adjustWpm(-5);
         break;
+      case 'KeyR':
+        restartTeleprompter();
+        break;
       case 'KeyM':
         DOM.hudBtnMirror.click();
         break;
@@ -650,11 +657,16 @@ function launchTeleprompter() {
   
   // 4. Start appropriate engine
   state.scrollMode = script.voiceScroll ? 'voice' : 'auto';
-  state.isPlaying = true;
-  
+  state.isPlaying = DOM.configAutoStart.checked;
+
   updateHUDButtonState();
   triggerHUDVisibility();
-  
+
+  if (!state.isPlaying) {
+    showToast('Ready. Press Space or Play to begin.');
+    return;
+  }
+
   if (state.scrollMode === 'voice') {
     startVoiceEngine();
   } else {
@@ -676,6 +688,44 @@ function exitTeleprompter() {
   DOM.dashboardView.classList.remove('hidden');
   
   showToast('Back to editor mode.');
+}
+
+function restartTeleprompter() {
+  const wasPlaying = state.isPlaying;
+
+  // Stop current engines cleanly
+  state.isPlaying = false;
+  stopVoiceEngine();
+
+  // Reset to the top
+  state.currentScrollY = 0;
+  state.targetScrollY = 0;
+  state.currentWordIndex = 0;
+  DOM.prompterViewport.scrollTop = 0;
+
+  // Clear word highlights
+  state.wordElements.forEach(el => {
+    el.classList.remove('current-word', 'spoken');
+    el.closest('.prompter-paragraph').classList.remove('active-paragraph');
+  });
+
+  if (!wasPlaying) {
+    showToast('Restarted. Press Space or Play to begin.');
+    return;
+  }
+
+  // Resume from top
+  state.isPlaying = true;
+  updateHUDButtonState();
+  triggerHUDVisibility();
+
+  if (state.scrollMode === 'voice') {
+    startVoiceEngine();
+  } else {
+    state.lastTime = performance.now();
+    requestAnimationFrame(renderAutoScrollTicker);
+    showToast('Restarted from beginning.');
+  }
 }
 
 function togglePlayback() {
@@ -820,11 +870,13 @@ function renderAutoScrollTicker(timestamp) {
     const wpm = script ? script.wpm : 130;
     const fontSize = script ? script.fontSize : 42;
     const lineHeight = script ? script.lineHeight : 1.6;
-    
-    // Professional scaling WPM to screen pixel speed relative to sizes
-    // Large font size scrolls faster in pixels/sec to maintain identical verbal speed rates
-    const verbalSizeMultiplier = fontSize * lineHeight * 0.72;
-    const pixelsPerSecond = (wpm / 60) * verbalSizeMultiplier;
+    const marginWidth = script ? (script.marginWidth || 700) : 700;
+
+    // Derive px/sec from actual reading geometry:
+    // estimate words per line from column width, then scale to line height in pixels.
+    // 0.52em avg char width × 5.5 avg chars/word gives avg word width in px.
+    const wordsPerLine = marginWidth / (fontSize * 0.52 * 5.5);
+    const pixelsPerSecond = (wpm / 60 / wordsPerLine) * (fontSize * lineHeight);
     
     state.targetScrollY += pixelsPerSecond * elapsed;
     
@@ -1061,6 +1113,47 @@ function renderVoiceScrollTicker() {
   }
   
   requestAnimationFrame(renderVoiceScrollTicker);
+}
+
+/* ==========================================================================
+   Config Panel Resize
+   ========================================================================== */
+
+function setupPanelResize() {
+  const handle = document.getElementById('config-resize-handle');
+  const panel = document.getElementById('config-panel');
+  if (!handle || !panel) return;
+
+  const MIN_WIDTH = 260;
+  const MAX_WIDTH = 640;
+
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = panel.offsetWidth;
+
+    handle.classList.add('dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    const onMove = (e) => {
+      // Panel is on the right; dragging left (lower clientX) widens it
+      const delta = startX - e.clientX;
+      const newWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, startWidth + delta));
+      panel.style.width = `${newWidth}px`;
+    };
+
+    const onUp = () => {
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
 }
 
 /* ==========================================================================
