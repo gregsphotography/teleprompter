@@ -649,21 +649,18 @@ input:checked + .slider:before {
   position: relative;
   display: inline-block;
   margin-right: 0.22em;
-  border-radius: 4px;
   padding: 0 2px;
-  transition: background-color 0.15s, color 0.15s;
+  transition: color 0.15s;
 }
 
 /* Spoken word feedback */
 .prompter-word.spoken {
   color: var(--accent-secondary);
-  text-shadow: 0 0 8px rgba(6, 182, 212, 0.4);
 }
 
 .prompter-word.current-word {
-  color: #fff;
-  background-color: rgba(99, 102, 241, 0.35);
-  box-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+  color: var(--accent-secondary);
+  filter: brightness(1.4);
 }
 
 /* --- Focus Reading Overlay Zone --- */
@@ -887,6 +884,45 @@ input:checked + .slider:before {
 
 .toast-error .toast-icon {
   background-color: var(--accent-error);
+}
+
+/* --- Colourblind Mode Overrides --- */
+body.colorblind-mode .prompter-word.spoken {
+  color: rgba(255, 255, 255, 0.55);
+  filter: none;
+}
+
+body.colorblind-mode .prompter-word.current-word {
+  color: #fde047;
+  filter: none;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  text-decoration-thickness: 2px;
+}
+
+body.colorblind-mode .listening .voice-dot {
+  background-color: #fde047;
+  animation: mic-pulse-cb 1.5s infinite ease-in-out;
+}
+
+body.colorblind-mode .voice-indicator.listening {
+  color: #fde047;
+  background-color: rgba(253, 224, 71, 0.08);
+}
+
+@keyframes mic-pulse-cb {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(253, 224, 71, 0.7);
+  }
+  70% {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 6px rgba(253, 224, 71, 0);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(253, 224, 71, 0);
+  }
 }
 
 /* --- Live Style Preview Box --- */

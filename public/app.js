@@ -56,7 +56,7 @@ Click the "Launch Prompter" button in the top right to test it out!`,
     marginWidth: 700,
     mirrorMode: false,
     voiceScroll: false,
-    focusOverlay: true,
+    focusOverlay: false,
     updatedAt: Date.now()
   },
   {
@@ -71,7 +71,7 @@ If speech recognition is active, speaking these words aloud will scroll the text
     marginWidth: 650,
     mirrorMode: false,
     voiceScroll: true,
-    focusOverlay: true,
+    focusOverlay: false,
     updatedAt: Date.now()
   }
 ];
@@ -94,6 +94,7 @@ const DOM = {
   configMarginWidth: document.getElementById('config-margin-width'),
   configMirrorMode: document.getElementById('config-mirror-mode'),
   configFocusOverlay: document.getElementById('config-focus-overlay'),
+  configColorblindMode: document.getElementById('config-colorblind-mode'),
   configAutoStart: document.getElementById('config-auto-start'),
   
   // Displays
@@ -147,6 +148,7 @@ const DOM = {
 
 document.addEventListener('DOMContentLoaded', () => {
   loadFromLocalStorage();
+  loadGlobalPreferences();
   setupEditorListeners();
   setupPrompterHUDListeners();
   setupGlobalShortcuts();
@@ -185,6 +187,12 @@ function loadFromLocalStorage() {
     console.error('Failed to load from local storage', e);
     showToast('Failed to load scripts from browser storage.', 'error');
   }
+}
+
+function loadGlobalPreferences() {
+  const colorblind = localStorage.getItem('aeroprompter_colorblind') === 'true';
+  DOM.configColorblindMode.checked = colorblind;
+  document.body.classList.toggle('colorblind-mode', colorblind);
 }
 
 function saveToLocalStorage() {
@@ -313,7 +321,7 @@ function createNewScript() {
     marginWidth: 700,
     mirrorMode: false,
     voiceScroll: false,
-    focusOverlay: true,
+    focusOverlay: false,
     fontFamily: 'sans',
     updatedAt: Date.now()
   };
@@ -487,6 +495,12 @@ function setupEditorListeners() {
   
   DOM.configFocusOverlay.addEventListener('change', () => {
     updateActiveScriptState('focusOverlay', DOM.configFocusOverlay.checked);
+  });
+
+  DOM.configColorblindMode.addEventListener('change', () => {
+    const enabled = DOM.configColorblindMode.checked;
+    document.body.classList.toggle('colorblind-mode', enabled);
+    localStorage.setItem('aeroprompter_colorblind', enabled);
   });
   
   // Handle Mutually Exclusive Scroll Modes
@@ -982,16 +996,23 @@ function initSpeechRecognition() {
   
   rec.onresult = (event) => {
     if (!state.isPlaying || state.scrollMode !== 'voice') return;
-    
-    // Process results
-    let phrase = "";
-    
-    // Get the most recent transcription strings
+
+    let finalPhrase = "";
+    let interimPhrase = "";
+
     for (let i = event.resultIndex; i < event.results.length; ++i) {
-      phrase += event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        finalPhrase += event.results[i][0].transcript;
+      } else {
+        interimPhrase += event.results[i][0].transcript;
+      }
     }
-    
-    processSpokenPhrase(phrase);
+
+    if (finalPhrase) {
+      processSpokenPhrase(finalPhrase, false);
+    } else if (interimPhrase) {
+      processSpokenPhrase(interimPhrase, true);
+    }
   };
   
   state.recognition = rec;
@@ -1029,44 +1050,41 @@ function stopVoiceEngine() {
   DOM.hudVoiceText.textContent = 'Voice Scroll Off';
 }
 
-function processSpokenPhrase(spokenText) {
+function processSpokenPhrase(spokenText, isInterim = false) {
   if (state.scriptWords.length === 0) return;
-  
+
   const spokenWords = spokenText.trim().toLowerCase().split(/\s+/).map(cleanWordText).filter(Boolean);
   if (spokenWords.length === 0) return;
-  
-  // Fuzzy Sliding Window Matcher
-  // Look forward from our current index to find matching script words
+
+  // Interim results require stronger evidence to advance (prevents rapid-fire partial matches)
+  const minScore  = isInterim ? 12 : 9;  // interim: ~3 consecutive words; final: ~2
+  const maxJump   = isInterim ?  4 : 8;  // interim: cautious advance; final: allow catch-up
+  const lookAhead = 15;                  // reduced from 35 to prevent large false-positive jumps
+
   const startIndex = state.currentWordIndex;
-  const lookAheadWindow = 35; // Maximum index search buffer
-  const maxIndex = Math.min(state.scriptWords.length, startIndex + lookAheadWindow);
-  
+  const maxIndex   = Math.min(state.scriptWords.length, startIndex + lookAhead);
+
   let bestMatchIndex = -1;
   let maxScore = 0;
-  
-  // We compare the spoken phrase against subsegments of the script
+
   for (let s = startIndex; s < maxIndex; s++) {
     let score = 0;
-    
-    // Simple lookahead match score
     for (let w = 0; w < Math.min(spokenWords.length, 5); w++) {
-      const spoke = spokenWords[spokenWords.length - 1 - w]; // Read spoken words from right to left
+      const spoke      = spokenWords[spokenWords.length - 1 - w];
       const scriptWord = state.scriptWords[s - w];
-      
       if (spoke && scriptWord && spoke === scriptWord) {
-        score += (5 - w); // Higher score for match of more recent spoken words
+        score += (5 - w);
       }
     }
-    
     if (score > maxScore) {
       maxScore = score;
       bestMatchIndex = s;
     }
   }
-  
-  // If we have a reasonably confident match, advance the prompter
-  if (bestMatchIndex !== -1 && bestMatchIndex >= state.currentWordIndex) {
-    scrollToWordIndex(bestMatchIndex);
+
+  if (bestMatchIndex !== -1 && maxScore >= minScore && bestMatchIndex >= state.currentWordIndex) {
+    const cappedIndex = Math.min(bestMatchIndex, state.currentWordIndex + maxJump);
+    scrollToWordIndex(cappedIndex);
   }
 }
 
