@@ -107,6 +107,9 @@ const DOM = {
   statChars: document.getElementById('stat-chars'),
   statTime: document.getElementById('stat-time'),
   
+  // Typography preview
+  typographyPreview: document.getElementById('typography-preview'),
+  
   // View Panels
   dashboardView: document.getElementById('dashboard-view'),
   prompterView: document.getElementById('prompter-view'),
@@ -285,6 +288,7 @@ function loadActiveScriptIntoEditor() {
   
   toggleScrollModeUI(isVoice);
   updateStats();
+  updateLivePreview();
 }
 
 function selectScript(id) {
@@ -398,6 +402,29 @@ function updateStats() {
   DOM.statTime.textContent = `${time.min}m ${time.sec}s`;
 }
 
+function updateLivePreview() {
+  if (!DOM.typographyPreview) return;
+  
+  const fontFamily = DOM.configFontFamily.value;
+  const fontSize = parseInt(DOM.configFontSize.value) || 42;
+  const lineHeight = parseFloat(DOM.configLineHeight.value) || 1.6;
+  const mirrorMode = DOM.configMirrorMode.checked;
+  
+  DOM.typographyPreview.className = 'typography-preview-box';
+  DOM.typographyPreview.classList.add(`prompter-font-${fontFamily}`);
+  
+  // Scale down font size proportionally so it fits inside the 90px height preview container
+  const previewFontSize = Math.max(12, Math.round(fontSize * 0.45));
+  DOM.typographyPreview.style.fontSize = `${previewFontSize}px`;
+  DOM.typographyPreview.style.lineHeight = `${lineHeight}`;
+  
+  if (mirrorMode) {
+    DOM.typographyPreview.style.transform = 'scaleX(-1)';
+  } else {
+    DOM.typographyPreview.style.transform = 'none';
+  }
+}
+
 /* ==========================================================================
    Settings Listeners
    ========================================================================== */
@@ -428,12 +455,14 @@ function setupEditorListeners() {
     const val = DOM.configFontSize.value;
     DOM.displayFontSize.textContent = `${val}px`;
     updateActiveScriptState('fontSize', parseInt(val));
+    updateLivePreview();
   });
   
   DOM.configLineHeight.addEventListener('input', () => {
     const val = DOM.configLineHeight.value;
     DOM.displayLineHeight.textContent = `${val}x`;
     updateActiveScriptState('lineHeight', parseFloat(val));
+    updateLivePreview();
   });
   
   DOM.configMarginWidth.addEventListener('input', () => {
@@ -444,11 +473,13 @@ function setupEditorListeners() {
 
   DOM.configFontFamily.addEventListener('change', () => {
     updateActiveScriptState('fontFamily', DOM.configFontFamily.value);
+    updateLivePreview();
   });
   
   // Switches toggles
   DOM.configMirrorMode.addEventListener('change', () => {
     updateActiveScriptState('mirrorMode', DOM.configMirrorMode.checked);
+    updateLivePreview();
   });
   
   DOM.configFocusOverlay.addEventListener('change', () => {
@@ -493,6 +524,7 @@ function setupPrompterHUDListeners() {
     // Synced configuration back
     DOM.configMirrorMode.checked = flipped;
     updateActiveScriptState('mirrorMode', flipped);
+    updateLivePreview();
     
     // Layout might shift, recalculate positions
     setTimeout(calculateWordOffsets, 100);

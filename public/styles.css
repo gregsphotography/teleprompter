@@ -862,3 +862,28 @@ input:checked + .slider:before {
 .toast-error .toast-icon {
   background-color: var(--accent-error);
 }
+
+/* --- Live Style Preview Box --- */
+.preview-box-container {
+  background-color: var(--bg-main);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-sm);
+  padding: 16px 12px;
+  margin-top: 6px;
+  overflow: hidden;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.typography-preview-box {
+  color: var(--text-primary);
+  text-align: center;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  font-weight: 500;
+}
