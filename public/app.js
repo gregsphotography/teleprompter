@@ -19,6 +19,7 @@ const state = {
   recognitionActive: false,
   scriptWords: [],       // Flat array of lowercased words for matching
   wordElements: [],      // DOM references for highlighting
+  wordOffsets: [],       // Cached word coordinates for scroll tracking
   currentWordIndex: 0,
   speechTimeout: null,
   
@@ -96,6 +97,7 @@ const DOM = {
   configFocusOverlay: document.getElementById('config-focus-overlay'),
   configColorblindMode: document.getElementById('config-colorblind-mode'),
   configAutoStart: document.getElementById('config-auto-start'),
+  containerVoiceScroll: document.getElementById('container-voice-control'),
   
   // Displays
   displayWpm: document.getElementById('display-wpm'),
@@ -152,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEditorListeners();
   setupPrompterHUDListeners();
   setupGlobalShortcuts();
+  setupResponsiveLayoutListeners();
   setupPanelResize();
   initSpeechRecognition();
 
@@ -774,6 +777,28 @@ function updateHUDButtonState() {
   }
 }
 
+function getPrompterLayoutMetrics(script) {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const isNarrowViewport = viewportWidth <= 760;
+  const configuredFontSize = script ? (parseInt(script.fontSize) || 42) : 42;
+  const configuredMarginWidth = script ? (parseInt(script.marginWidth) || 700) : 700;
+
+  if (!isNarrowViewport) {
+    return {
+      fontSize: configuredFontSize,
+      marginWidth: configuredMarginWidth
+    };
+  }
+
+  const maxReadableFontSize = Math.max(28, Math.min(44, viewportWidth * 0.105));
+  const maxReadableWidth = Math.max(280, viewportWidth - 32);
+
+  return {
+    fontSize: Math.min(configuredFontSize, maxReadableFontSize),
+    marginWidth: Math.min(configuredMarginWidth, maxReadableWidth)
+  };
+}
+
 function applyPromptSizingConfigs(script) {
   // Clear layout properties
   DOM.prompterTextBody.className = 'prompter-text-body';
@@ -790,9 +815,10 @@ function applyPromptSizingConfigs(script) {
   DOM.hudBtnGuides.classList.toggle('active', script.focusOverlay !== false);
   
   // CSS dimensions applied
-  DOM.prompterTextBody.style.fontSize = `${script.fontSize || 42}px`;
+  const layoutMetrics = getPrompterLayoutMetrics(script);
+  DOM.prompterTextBody.style.fontSize = `${layoutMetrics.fontSize}px`;
   DOM.prompterTextBody.style.lineHeight = `${script.lineHeight || 1.6}`;
-  DOM.prompterTextBody.style.maxWidth = `${script.marginWidth || 700}px`;
+  DOM.prompterTextBody.style.maxWidth = `${layoutMetrics.marginWidth}px`;
   
   // Sync Speed HUD
   DOM.hudSpeedText.textContent = `${script.wpm} WPM`;
@@ -811,6 +837,7 @@ function tokenizeScriptText(text) {
   DOM.prompterTextBody.innerHTML = '';
   state.scriptWords = [];
   state.wordElements = [];
+  state.wordOffsets = [];
   
   const paragraphs = text.split(/\n+/).filter(p => p.trim());
   let wordIndex = 0;
@@ -868,6 +895,23 @@ function calculateWordOffsets() {
   });
 }
 
+function setupResponsiveLayoutListeners() {
+  let resizeTimeout = null;
+
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      const script = getActiveScript();
+      if (!script || !DOM.prompterView.classList.contains('active')) return;
+
+      applyPromptSizingConfigs(script);
+      calculateWordOffsets();
+      state.currentScrollY = DOM.prompterViewport.scrollTop;
+      state.targetScrollY = DOM.prompterViewport.scrollTop;
+    }, 120);
+  });
+}
+
 /* ==========================================================================
    Smooth Auto-Scroll Physics Ticker (RAF Loop)
    ========================================================================== */
@@ -882,9 +926,10 @@ function renderAutoScrollTicker(timestamp) {
   if (elapsed < 0.1) {
     const script = getActiveScript();
     const wpm = script ? script.wpm : 130;
-    const fontSize = script ? script.fontSize : 42;
+    const renderedStyles = window.getComputedStyle(DOM.prompterTextBody);
+    const fontSize = parseFloat(renderedStyles.fontSize) || (script ? script.fontSize : 42);
     const lineHeight = script ? script.lineHeight : 1.6;
-    const marginWidth = script ? (script.marginWidth || 700) : 700;
+    const marginWidth = DOM.prompterTextBody.clientWidth || (script ? (script.marginWidth || 700) : 700);
 
     // Derive px/sec from actual reading geometry:
     // estimate words per line from column width, then scale to line height in pixels.
@@ -909,7 +954,7 @@ function renderAutoScrollTicker(timestamp) {
 }
 
 function highlightActiveWordByScrollPosition() {
-  if (state.wordOffsets.length === 0) return;
+  if (!state.wordOffsets || state.wordOffsets.length === 0) return;
   
   // Highlight the paragraph that lies in the center vertical line
   const viewportCenter = DOM.prompterViewport.scrollTop + (DOM.prompterViewport.clientHeight / 2);
@@ -951,8 +996,10 @@ function initSpeechRecognition() {
     console.warn("Speech Recognition API is not supported in this browser.");
     DOM.configVoiceScroll.disabled = true;
     DOM.configVoiceScroll.checked = false;
-    DOM.containerVoiceScroll.style.opacity = '0.4';
-    DOM.containerVoiceScroll.querySelector('.helper-text').textContent = 'Microphone speech tracking not supported in this browser. (Use Chrome or Safari)';
+    if (DOM.containerVoiceScroll) {
+      DOM.containerVoiceScroll.style.opacity = '0.4';
+      DOM.containerVoiceScroll.querySelector('.helper-text').textContent = 'Microphone speech tracking not supported in this browser. (Use Chrome or Safari)';
+    }
     return;
   }
   
