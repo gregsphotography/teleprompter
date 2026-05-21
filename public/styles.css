@@ -69,6 +69,70 @@ body {
   min-height: 100dvh;
 }
 
+body.legal-page {
+  overflow: auto;
+}
+
+.legal-shell {
+  width: min(760px, calc(100vw - 40px));
+  margin: 0 auto;
+  padding: 64px 0 80px;
+}
+
+.legal-back-link,
+.legal-shell a {
+  color: var(--accent-secondary);
+}
+
+.legal-back-link {
+  display: inline-flex;
+  margin-bottom: 36px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.legal-back-link:hover {
+  color: var(--accent-secondary);
+}
+
+.legal-shell h1 {
+  margin-bottom: 36px;
+  font-size: clamp(2.25rem, 8vw, 4rem);
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.legal-shell section {
+  padding: 28px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+.legal-shell h2 {
+  margin-bottom: 16px;
+  font-size: 1.1rem;
+  color: var(--text-primary);
+}
+
+.legal-shell h3 {
+  margin: 22px 0 8px;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.legal-shell p,
+.legal-shell address {
+  max-width: 68ch;
+  color: var(--text-secondary);
+  font-style: normal;
+}
+
+.legal-shell p + p,
+.legal-shell address + p {
+  margin-top: 14px;
+}
+
 /* Custom Scrollbar Styles */
 ::-webkit-scrollbar {
   width: 8px;
@@ -231,6 +295,25 @@ body {
   flex-grow: 1;
   overflow-y: auto;
   padding: 0 12px 20px 12px;
+}
+
+.sidebar-footer {
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border-color);
+}
+
+.sidebar-footer a {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: color var(--transition-fast);
+}
+
+.sidebar-footer a:hover {
+  color: var(--accent-secondary);
 }
 
 .scripts-list-title {
