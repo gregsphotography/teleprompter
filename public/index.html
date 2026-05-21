@@ -80,7 +80,7 @@
                 <div class="switch-container" id="container-voice-control">
                   <span class="control-label">
                     Voice-Activated Scroll
-                    <span class="helper-text" style="display:block;">Scrolls as you read aloud using speech recognition.</span>
+                    <span class="tooltip-help" tabindex="0" role="button" aria-label="Scrolls as you read aloud using speech recognition." data-tooltip="Scrolls as you read aloud using speech recognition.">?</span>
                   </span>
                   <label class="switch">
                     <input type="checkbox" id="config-voice-scroll" checked>
@@ -99,7 +99,7 @@
                 <div class="switch-container" id="container-auto-start" style="margin-top: 8px;">
                   <span class="control-label">
                     Start Immediately
-                    <span class="helper-text" style="display:block;">Begins scrolling as soon as prompter opens.</span>
+                    <span class="tooltip-help" tabindex="0" role="button" aria-label="Begins scrolling as soon as prompter opens." data-tooltip="Begins scrolling as soon as prompter opens.">?</span>
                   </span>
                   <label class="switch">
                     <input type="checkbox" id="config-auto-start" checked>
@@ -113,10 +113,10 @@
               <div class="section-title">Speed Adjustments</div>
               <div class="control-group" id="group-speed-control">
                 <div class="control-label">
-                  Reading Speed <span id="display-wpm" class="control-value">130 WPM</span>
+                  <span>Reading Speed <span class="tooltip-help" tabindex="0" role="button" aria-label="Applies to auto-scroll. Adjustable inside the prompter." data-tooltip="Applies to auto-scroll. Adjustable inside the prompter.">?</span></span>
+                  <span id="display-wpm" class="control-value">130 WPM</span>
                 </div>
                 <input type="range" id="config-wpm" min="50" max="300" step="5" value="130">
-                <div class="helper-text">Applies to auto-scroll. Adjustable inside the prompter.</div>
               </div>
             </div>
 
@@ -162,7 +162,7 @@
                 <div class="switch-container">
                   <span class="control-label">
                     Colourblind Mode
-                    <span class="helper-text" style="display:block;">Replaces cyan cues with high-contrast yellow and underline markers.</span>
+                    <span class="tooltip-help" tabindex="0" role="button" aria-label="Replaces cyan cues with high-contrast yellow and underline markers." data-tooltip="Replaces cyan cues with high-contrast yellow and underline markers.">?</span>
                   </span>
                   <label class="switch">
                     <input type="checkbox" id="config-colorblind-mode">
@@ -178,7 +178,7 @@
                 <div class="switch-container">
                   <span class="control-label">
                     Mirror Mode (Horizontal)
-                    <span class="helper-text" style="display:block;">Flips text horizontally for glass mirrors.</span>
+                    <span class="tooltip-help" tabindex="0" role="button" aria-label="Flips text horizontally for glass mirrors." data-tooltip="Flips text horizontally for glass mirrors.">?</span>
                   </span>
                   <label class="switch">
                     <input type="checkbox" id="config-mirror-mode">
@@ -189,7 +189,7 @@
                 <div class="switch-container" style="margin-top: 8px;">
                   <span class="control-label">
                     Focus Highlight Overlay
-                    <span class="helper-text" style="display:block;">Adds dynamic horizontal guidelines.</span>
+                    <span class="tooltip-help" tabindex="0" role="button" aria-label="Adds dynamic horizontal guidelines." data-tooltip="Adds dynamic horizontal guidelines.">?</span>
                   </span>
                   <label class="switch">
                     <input type="checkbox" id="config-focus-overlay">

@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadFromLocalStorage();
   loadGlobalPreferences();
   setupEditorListeners();
+  setupTooltips();
   setupPrompterHUDListeners();
   setupGlobalShortcuts();
   setupResponsiveLayoutListeners();
@@ -403,6 +404,28 @@ function toggleScrollModeUI(isVoiceActive) {
     DOM.groupSpeedControl.style.opacity = '1';
     DOM.groupSpeedControl.style.pointerEvents = 'auto';
   }
+}
+
+function setupTooltips() {
+  document.querySelectorAll('.tooltip-help').forEach(help => {
+    const showTooltip = () => help.classList.add('is-visible');
+    const hideTooltip = () => help.classList.remove('is-visible');
+
+    help.addEventListener('mouseenter', showTooltip);
+    help.addEventListener('focus', showTooltip);
+    help.addEventListener('click', (event) => {
+      event.stopPropagation();
+      showTooltip();
+    });
+    help.addEventListener('mouseleave', hideTooltip);
+    help.addEventListener('blur', hideTooltip);
+    help.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        hideTooltip();
+        help.blur();
+      }
+    });
+  });
 }
 
 /* ==========================================================================
@@ -1012,8 +1035,11 @@ function initSpeechRecognition() {
     DOM.configVoiceScroll.disabled = true;
     DOM.configVoiceScroll.checked = false;
     if (DOM.containerVoiceScroll) {
+      const voiceHelp = DOM.containerVoiceScroll.querySelector('.tooltip-help');
+      const unsupportedMessage = 'Microphone speech tracking not supported in this browser. Use Chrome or Safari.';
       DOM.containerVoiceScroll.style.opacity = '0.4';
-      DOM.containerVoiceScroll.querySelector('.helper-text').textContent = 'Microphone speech tracking not supported in this browser. (Use Chrome or Safari)';
+      voiceHelp?.setAttribute('data-tooltip', unsupportedMessage);
+      voiceHelp?.setAttribute('aria-label', unsupportedMessage);
     }
     return;
   }
