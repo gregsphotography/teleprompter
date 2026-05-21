@@ -2,12 +2,14 @@
    AeroPrompter - Premium Script Editor & Scrolling Engine
    ========================================================================== */
 
+const VOICE_SCROLL_DEFAULT_VERSION = '2';
+
 // --- Global Application State ---
 const state = {
   scripts: [],
   activeScriptId: null,
   isPlaying: false,
-  scrollMode: 'auto', // 'auto' or 'voice'
+  scrollMode: 'voice', // 'auto' or 'voice'
   
   // High-precision scrolling physics
   currentScrollY: 0,
@@ -56,7 +58,7 @@ Click the "Launch Prompter" button in the top right to test it out!`,
     lineHeight: 1.6,
     marginWidth: 700,
     mirrorMode: false,
-    voiceScroll: false,
+    voiceScroll: true,
     focusOverlay: false,
     updatedAt: Date.now()
   },
@@ -170,11 +172,20 @@ function loadFromLocalStorage() {
   try {
     const savedScripts = localStorage.getItem('aeroprompter_scripts');
     const savedActiveId = localStorage.getItem('aeroprompter_active_id');
+    const savedVoiceDefaultVersion = localStorage.getItem('aeroprompter_voice_default_version');
     
     if (savedScripts) {
       state.scripts = JSON.parse(savedScripts);
     } else {
       state.scripts = [...DEFAULT_SCRIPTS];
+      saveToLocalStorage();
+    }
+
+    if (savedVoiceDefaultVersion !== VOICE_SCROLL_DEFAULT_VERSION) {
+      state.scripts.forEach(script => {
+        script.voiceScroll = true;
+      });
+      localStorage.setItem('aeroprompter_voice_default_version', VOICE_SCROLL_DEFAULT_VERSION);
       saveToLocalStorage();
     }
     
@@ -211,6 +222,10 @@ function saveToLocalStorage() {
 
 function getActiveScript() {
   return state.scripts.find(s => s.id === state.activeScriptId);
+}
+
+function isVoiceScrollEnabled(script) {
+  return script?.voiceScroll !== false;
 }
 
 /* ==========================================================================
@@ -296,7 +311,7 @@ function loadActiveScriptIntoEditor() {
   DOM.configFocusOverlay.checked = script.focusOverlay !== false;
   
   // Set Scroll Modes
-  const isVoice = !!script.voiceScroll;
+  const isVoice = isVoiceScrollEnabled(script);
   DOM.configVoiceScroll.checked = isVoice;
   DOM.configAutoScroll.checked = !isVoice;
   
@@ -323,7 +338,7 @@ function createNewScript() {
     lineHeight: 1.6,
     marginWidth: 700,
     mirrorMode: false,
-    voiceScroll: false,
+    voiceScroll: true,
     focusOverlay: false,
     fontFamily: 'sans',
     updatedAt: Date.now()
@@ -673,7 +688,7 @@ function launchTeleprompter() {
   }, 300);
   
   // 4. Start appropriate engine
-  state.scrollMode = script.voiceScroll ? 'voice' : 'auto';
+  state.scrollMode = isVoiceScrollEnabled(script) ? 'voice' : 'auto';
   state.isPlaying = DOM.configAutoStart.checked;
 
   updateHUDButtonState();
@@ -822,7 +837,7 @@ function applyPromptSizingConfigs(script) {
   
   // Sync Speed HUD
   DOM.hudSpeedText.textContent = `${script.wpm} WPM`;
-  if (script.voiceScroll) {
+  if (isVoiceScrollEnabled(script)) {
     DOM.hudSpeedWrapper.style.display = 'none';
   } else {
     DOM.hudSpeedWrapper.style.display = 'flex';
