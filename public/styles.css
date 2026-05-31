@@ -1696,27 +1696,51 @@ body.feedback-modal-open {
 }
 
 /* --- Colourblind Mode Overrides --- */
+body.colorblind-mode .prompter-paragraph {
+  opacity: 0.24;
+}
+
+body.colorblind-mode .prompter-paragraph.active-paragraph {
+  opacity: 1;
+}
+
 body.colorblind-mode .prompter-word.spoken {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(248, 250, 252, 0.38);
   filter: none;
+  opacity: 0.72;
+  font-weight: 500;
+  text-decoration: none;
+  transition-property: none;
+  transition-duration: 0s;
 }
 
 body.colorblind-mode .prompter-word.current-word {
-  color: #fde047;
+  color: #111827;
+  background-color: #fde047;
+  box-shadow: 0 0 0 3px rgba(253, 224, 71, 0.36);
   filter: none;
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-thickness: 2px;
+  opacity: 1;
+  font-weight: 800;
+  border-radius: 6px;
+  padding: 0 0.16em 0.04em;
+  text-decoration: none;
+  border-bottom: 0.14em solid #f8fafc;
+  transition-property: none;
+  transition-duration: 0s;
 }
 
 body.colorblind-mode .listening .voice-dot {
   background-color: #fde047;
+  outline: 2px solid rgba(248, 250, 252, 0.9);
+  outline-offset: 2px;
   animation: mic-pulse-cb 1.5s infinite ease-in-out;
 }
 
 body.colorblind-mode .voice-indicator.listening {
   color: #fde047;
-  background-color: rgba(253, 224, 71, 0.08);
+  background-color: rgba(253, 224, 71, 0.14);
+  border: 1px solid rgba(253, 224, 71, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(248, 250, 252, 0.08);
 }
 
 @keyframes mic-pulse-cb {
