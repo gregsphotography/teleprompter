@@ -1187,15 +1187,6 @@ function resetParagraphTopAlignment() {
     : null;
 }
 
-function maybeTopAlignParagraph(paragraphEl) {
-  if (!isMobilePrompterViewport() || !paragraphEl) return false;
-  if (state.activeParagraphForTopAlign === paragraphEl) return false;
-
-  state.activeParagraphForTopAlign = paragraphEl;
-  state.targetScrollY = getParagraphTopScrollTarget(paragraphEl);
-  return true;
-}
-
 function maybeAdvanceAutoParagraphTopAlign() {
   if (!isMobilePrompterViewport() || state.scrollMode !== 'auto') return false;
 
@@ -1500,11 +1491,8 @@ function scrollToWordIndex(index) {
       const wordOffset = state.wordOffsets[idx];
       if (wordOffset) {
         const viewportHeight = DOM.prompterViewport.clientHeight;
-        const topAligned = maybeTopAlignParagraph(para);
-        if (!topAligned) {
-          // Center of viewport scroll position target
-          state.targetScrollY = wordOffset.top - (viewportHeight / 2) + (wordOffset.height / 2);
-        }
+        // Center of viewport scroll position target
+        state.targetScrollY = wordOffset.top - (viewportHeight / 2) + (wordOffset.height / 2);
       }
     } else {
       el.classList.remove('spoken', 'current-word');
