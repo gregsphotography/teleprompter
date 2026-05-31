@@ -24,6 +24,7 @@ const state = {
   wordElements: [],      // DOM references for highlighting
   wordOffsets: [],       // Cached word coordinates for scroll tracking
   currentWordIndex: 0,
+  activeParagraphForTopAlign: null,
   speechTimeout: null,
   
   // Interface state
@@ -912,6 +913,7 @@ function launchTeleprompter() {
   state.currentScrollY = 0;
   state.targetScrollY = 0;
   state.currentWordIndex = 0;
+  resetParagraphTopAlignment();
   
   // Calculate offsets for precise LERP/Voice tracking
   setTimeout(() => {
@@ -965,6 +967,7 @@ function restartTeleprompter() {
   state.currentScrollY = 0;
   state.targetScrollY = 0;
   state.currentWordIndex = 0;
+  resetParagraphTopAlignment();
   DOM.prompterViewport.scrollTop = 0;
 
   // Clear word highlights
@@ -1148,6 +1151,70 @@ function calculateWordOffsets() {
   });
 }
 
+function isMobilePrompterViewport() {
+  const viewportWidth = window.innerWidth || document.documentElement.clientWidth || 1024;
+  return viewportWidth <= 760;
+}
+
+function getParagraphTopScrollTarget(paragraphEl) {
+  if (!paragraphEl) return 0;
+
+  return Math.max(0, paragraphEl.offsetTop - getPrompterViewportTopPadding());
+}
+
+function getFirstPrompterParagraph() {
+  return DOM.prompterTextBody.querySelector('.prompter-paragraph');
+}
+
+function getPrompterViewportTopPadding() {
+  const viewportStyles = window.getComputedStyle(DOM.prompterViewport);
+  return parseFloat(viewportStyles.paddingTop) || 0;
+}
+
+function getPrompterParagraphs() {
+  return Array.from(DOM.prompterTextBody.querySelectorAll('.prompter-paragraph'));
+}
+
+function resetParagraphTopAlignment() {
+  state.activeParagraphForTopAlign = isMobilePrompterViewport()
+    ? getFirstPrompterParagraph()
+    : null;
+}
+
+function maybeTopAlignParagraph(paragraphEl) {
+  if (!isMobilePrompterViewport() || !paragraphEl) return false;
+  if (state.activeParagraphForTopAlign === paragraphEl) return false;
+
+  state.activeParagraphForTopAlign = paragraphEl;
+  state.targetScrollY = getParagraphTopScrollTarget(paragraphEl);
+  return true;
+}
+
+function maybeAdvanceAutoParagraphTopAlign() {
+  if (!isMobilePrompterViewport() || state.scrollMode !== 'auto') return false;
+
+  const paragraphs = getPrompterParagraphs();
+  if (paragraphs.length === 0) return false;
+
+  let currentIndex = paragraphs.indexOf(state.activeParagraphForTopAlign);
+  if (currentIndex === -1) {
+    currentIndex = 0;
+    state.activeParagraphForTopAlign = paragraphs[currentIndex];
+  }
+
+  const currentParagraph = paragraphs[currentIndex];
+  const nextParagraph = paragraphs[currentIndex + 1];
+  if (!currentParagraph || !nextParagraph) return false;
+
+  const viewportTop = DOM.prompterViewport.scrollTop + getPrompterViewportTopPadding();
+  const currentParagraphBottom = currentParagraph.offsetTop + currentParagraph.offsetHeight;
+  if (viewportTop < currentParagraphBottom) return false;
+
+  state.activeParagraphForTopAlign = nextParagraph;
+  state.targetScrollY = getParagraphTopScrollTarget(nextParagraph);
+  return true;
+}
+
 function setupResponsiveLayoutListeners() {
   let resizeTimeout = null;
 
@@ -1235,6 +1302,7 @@ function highlightActiveWordByScrollPosition() {
     const activePara = activeWordEl.closest('.prompter-paragraph');
     activePara.classList.add('active-paragraph');
     activeWordEl.classList.add('current-word');
+    maybeAdvanceAutoParagraphTopAlign();
   }
 }
 
@@ -1424,8 +1492,11 @@ function scrollToWordIndex(index) {
       const wordOffset = state.wordOffsets[idx];
       if (wordOffset) {
         const viewportHeight = DOM.prompterViewport.clientHeight;
-        // Center of viewport scroll position target
-        state.targetScrollY = wordOffset.top - (viewportHeight / 2) + (wordOffset.height / 2);
+        const topAligned = maybeTopAlignParagraph(para);
+        if (!topAligned) {
+          // Center of viewport scroll position target
+          state.targetScrollY = wordOffset.top - (viewportHeight / 2) + (wordOffset.height / 2);
+        }
       }
     } else {
       el.classList.remove('spoken', 'current-word');
