@@ -1776,9 +1776,9 @@ body.colorblind-mode .voice-indicator.listening {
   color: var(--text-primary);
   text-align: center;
   transition: all var(--transition-fast);
-  white-space: nowrap;
+  white-space: normal;
   overflow: hidden;
-  text-overflow: ellipsis;
   width: 100%;
   font-weight: 500;
+  overflow-wrap: break-word;
 }

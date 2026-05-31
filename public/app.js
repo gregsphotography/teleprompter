@@ -590,15 +590,20 @@ function updateLivePreview() {
   const fontFamily = DOM.configFontFamily.value;
   const fontSize = parseInt(DOM.configFontSize.value) || 42;
   const lineHeight = parseFloat(DOM.configLineHeight.value) || 1.6;
+  const marginWidth = parseInt(DOM.configMarginWidth.value) || 700;
   const mirrorMode = DOM.configMirrorMode.checked;
+  const layoutMetrics = getPrompterLayoutMetrics({
+    fontSize,
+    marginWidth
+  });
   
   DOM.typographyPreview.className = 'typography-preview-box';
   DOM.typographyPreview.classList.add(`prompter-font-${fontFamily}`);
   
-  // Scale down font size proportionally so it fits inside the 90px height preview container
-  const previewFontSize = Math.max(12, Math.round(fontSize * 0.45));
-  DOM.typographyPreview.style.fontSize = `${previewFontSize}px`;
+  DOM.typographyPreview.style.fontSize = `${layoutMetrics.fontSize}px`;
   DOM.typographyPreview.style.lineHeight = `${lineHeight}`;
+  DOM.typographyPreview.style.width = `${layoutMetrics.marginWidth}px`;
+  DOM.typographyPreview.style.maxWidth = '100%';
   
   if (mirrorMode) {
     DOM.typographyPreview.style.transform = 'scaleX(-1)';
@@ -655,6 +660,7 @@ function setupEditorListeners() {
     const val = DOM.configMarginWidth.value;
     DOM.displayMarginWidth.textContent = `${val}px`;
     updateActiveScriptState('marginWidth', parseInt(val));
+    updateLivePreview();
   });
 
   DOM.configFontFamily.addEventListener('change', () => {
@@ -1221,6 +1227,8 @@ function setupResponsiveLayoutListeners() {
   window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
     resizeTimeout = setTimeout(() => {
+      updateLivePreview();
+
       const script = getActiveScript();
       if (!script || !DOM.prompterView.classList.contains('active')) return;
 
