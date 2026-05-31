@@ -8,4 +8,12 @@
     <loc>https://aeroprompter.app/imprint.html</loc>
     <priority>0.3</priority>
   </url>
+  <url>
+    <loc>https://aeroprompter.app/privacy.html</loc>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://aeroprompter.app/cookie-policy.html</loc>
+    <priority>0.3</priority>
+  </url>
 </urlset>
