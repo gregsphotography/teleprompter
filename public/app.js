@@ -3,6 +3,7 @@
    ========================================================================== */
 
 const VOICE_SCROLL_DEFAULT_VERSION = '2';
+const EXPORT_FORMAT_VERSION = 1;
 
 // --- Global Application State ---
 const state = {
@@ -26,7 +27,9 @@ const state = {
   speechTimeout: null,
   
   // Interface state
-  hudFadeTimeout: null
+  hudFadeTimeout: null,
+  toastTimeout: null,
+  wakeLock: null
 };
 
 // --- Default Welcome Scripts for Onboarding ---
@@ -83,6 +86,11 @@ If speech recognition is active, speaking these words aloud will scroll the text
 const DOM = {
   scriptsList: document.getElementById('scripts-list'),
   btnNewScript: document.getElementById('btn-new-script'),
+  btnImportScripts: document.getElementById('btn-import-scripts'),
+  btnExportScripts: document.getElementById('btn-export-scripts'),
+  btnDuplicateScript: document.getElementById('btn-duplicate-script'),
+  btnFeedback: document.getElementById('btn-feedback'),
+  scriptImportFile: document.getElementById('script-import-file'),
   scriptTitleField: document.getElementById('script-title-field'),
   scriptEditorBody: document.getElementById('script-editor-body'),
   btnLaunch: document.getElementById('btn-launch'),
@@ -143,7 +151,19 @@ const DOM = {
   
   // Toast
   appToast: document.getElementById('app-toast'),
-  toastMessage: document.getElementById('toast-message')
+  toastMessage: document.getElementById('toast-message'),
+
+  // Feedback modal
+  feedbackModal: document.getElementById('feedback-modal'),
+  feedbackBackdrop: document.getElementById('feedback-backdrop'),
+  feedbackClose: document.getElementById('feedback-close'),
+  feedbackCancel: document.getElementById('feedback-cancel'),
+  feedbackForm: document.getElementById('feedback-form'),
+  feedbackName: document.getElementById('feedback-name'),
+  feedbackEmail: document.getElementById('feedback-email'),
+  feedbackMessage: document.getElementById('feedback-message'),
+  feedbackCompany: document.getElementById('feedback-company'),
+  feedbackSubmit: document.getElementById('feedback-submit')
 };
 
 /* ==========================================================================
@@ -156,10 +176,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setupEditorListeners();
   setupTooltips();
   setupPrompterHUDListeners();
+  setupFeedbackListeners();
   setupGlobalShortcuts();
   setupResponsiveLayoutListeners();
   setupPanelResize();
   initSpeechRecognition();
+  registerServiceWorker();
 
   // Trigger initial UI sizing update
   updateStats();
@@ -219,6 +241,30 @@ function saveToLocalStorage() {
   } catch (e) {
     console.error('Failed to save to local storage', e);
   }
+}
+
+function clampNumber(value, min, max, fallback) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.max(min, Math.min(max, numeric));
+}
+
+function normalizeScript(rawScript, fallbackIndex = 0) {
+  const now = Date.now();
+  return {
+    id: typeof rawScript.id === 'string' && rawScript.id ? rawScript.id : `script_${now}_${fallbackIndex}`,
+    title: typeof rawScript.title === 'string' && rawScript.title.trim() ? rawScript.title : 'Untitled Script',
+    body: typeof rawScript.body === 'string' ? rawScript.body : '',
+    wpm: clampNumber(rawScript.wpm, 50, 300, 130),
+    fontSize: clampNumber(rawScript.fontSize, 24, 80, 42),
+    lineHeight: clampNumber(rawScript.lineHeight, 1.2, 2.2, 1.6),
+    marginWidth: clampNumber(rawScript.marginWidth, 400, 1200, 700),
+    mirrorMode: !!rawScript.mirrorMode,
+    voiceScroll: rawScript.voiceScroll !== false,
+    focusOverlay: rawScript.focusOverlay !== false,
+    fontFamily: ['sans', 'serif', 'mono'].includes(rawScript.fontFamily) ? rawScript.fontFamily : 'sans',
+    updatedAt: Number.isFinite(rawScript.updatedAt) ? rawScript.updatedAt : now
+  };
 }
 
 function getActiveScript() {
@@ -357,6 +403,89 @@ function createNewScript() {
   showToast('New script created.', 'success');
 }
 
+function duplicateActiveScript() {
+  const script = getActiveScript();
+  if (!script) return;
+
+  const duplicate = {
+    ...script,
+    id: `script_${Date.now()}`,
+    title: `${script.title || 'Untitled Script'} Copy`,
+    updatedAt: Date.now()
+  };
+
+  state.scripts.unshift(duplicate);
+  state.activeScriptId = duplicate.id;
+  renderScriptsSidebar();
+  loadActiveScriptIntoEditor();
+  saveToLocalStorage();
+  showToast('Script duplicated.', 'success');
+}
+
+function exportScripts() {
+  const payload = {
+    app: 'AeroPrompter',
+    version: EXPORT_FORMAT_VERSION,
+    exportedAt: new Date().toISOString(),
+    scripts: state.scripts.map(script => normalizeScript(script))
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `aeroprompter-scripts-${stamp}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+  showToast('Scripts exported.', 'success');
+}
+
+function importScriptsFromFile(file) {
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      const importedScripts = Array.isArray(parsed) ? parsed : parsed.scripts;
+
+      if (!Array.isArray(importedScripts) || importedScripts.length === 0) {
+        throw new Error('No scripts found');
+      }
+
+      const existingIds = new Set(state.scripts.map(script => script.id));
+      const normalized = importedScripts.map((script, index) => {
+        const nextScript = normalizeScript(script, index);
+        if (existingIds.has(nextScript.id)) {
+          nextScript.id = `script_${Date.now()}_${index}`;
+        }
+        existingIds.add(nextScript.id);
+        return nextScript;
+      });
+
+      state.scripts = [...normalized, ...state.scripts];
+      state.activeScriptId = normalized[0].id;
+      renderScriptsSidebar();
+      loadActiveScriptIntoEditor();
+      saveToLocalStorage();
+      showToast(`${normalized.length} script${normalized.length === 1 ? '' : 's'} imported.`, 'success');
+    } catch (error) {
+      console.error('Script import failed', error);
+      showToast('Import failed. Choose a valid AeroPrompter JSON file.', 'error');
+    } finally {
+      DOM.scriptImportFile.value = '';
+    }
+  };
+  reader.onerror = () => {
+    showToast('Could not read import file.', 'error');
+    DOM.scriptImportFile.value = '';
+  };
+  reader.readAsText(file);
+}
+
 function deleteScript(id) {
   const index = state.scripts.findIndex(s => s.id === id);
   if (index === -1) return;
@@ -484,6 +613,10 @@ function updateLivePreview() {
 function setupEditorListeners() {
   // Sidebar actions
   DOM.btnNewScript.addEventListener('click', createNewScript);
+  DOM.btnDuplicateScript.addEventListener('click', duplicateActiveScript);
+  DOM.btnExportScripts.addEventListener('click', exportScripts);
+  DOM.btnImportScripts.addEventListener('click', () => DOM.scriptImportFile.click());
+  DOM.scriptImportFile.addEventListener('change', () => importScriptsFromFile(DOM.scriptImportFile.files[0]));
   
   // Editor changes
   DOM.scriptTitleField.addEventListener('input', () => {
@@ -563,6 +696,77 @@ function setupEditorListeners() {
   DOM.btnLaunch.addEventListener('click', launchTeleprompter);
 }
 
+function setupFeedbackListeners() {
+  DOM.btnFeedback.addEventListener('click', openFeedbackModal);
+  DOM.feedbackClose.addEventListener('click', closeFeedbackModal);
+  DOM.feedbackCancel.addEventListener('click', closeFeedbackModal);
+  DOM.feedbackBackdrop.addEventListener('click', closeFeedbackModal);
+  DOM.feedbackForm.addEventListener('submit', submitFeedbackForm);
+
+  window.addEventListener('keydown', (event) => {
+    if (event.code !== 'Escape' || DOM.feedbackModal.hidden) return;
+    event.preventDefault();
+    closeFeedbackModal();
+  });
+}
+
+function openFeedbackModal() {
+  DOM.feedbackModal.hidden = false;
+  document.body.classList.add('feedback-modal-open');
+  setTimeout(() => DOM.feedbackName.focus(), 0);
+}
+
+function closeFeedbackModal() {
+  if (DOM.feedbackModal.hidden || DOM.feedbackSubmit.disabled) return;
+
+  DOM.feedbackModal.hidden = true;
+  document.body.classList.remove('feedback-modal-open');
+  DOM.btnFeedback.focus();
+}
+
+async function submitFeedbackForm(event) {
+  event.preventDefault();
+
+  const payload = {
+    name: DOM.feedbackName.value.trim(),
+    email: DOM.feedbackEmail.value.trim(),
+    message: DOM.feedbackMessage.value.trim(),
+    company: DOM.feedbackCompany.value.trim()
+  };
+
+  setFeedbackSubmitting(true);
+
+  try {
+    const response = await fetch('/api/feedback', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error('Feedback submission failed');
+    }
+
+    DOM.feedbackForm.reset();
+    closeFeedbackModal();
+    showToast('Thanks, your feedback was sent.', 'success');
+  } catch (error) {
+    console.error('Feedback submission failed', error);
+    showToast('Could not send feedback right now.', 'error');
+  } finally {
+    setFeedbackSubmitting(false);
+  }
+}
+
+function setFeedbackSubmitting(isSubmitting) {
+  DOM.feedbackSubmit.disabled = isSubmitting;
+  DOM.feedbackCancel.disabled = isSubmitting;
+  DOM.feedbackClose.disabled = isSubmitting;
+  DOM.feedbackSubmit.textContent = isSubmitting ? 'Sending...' : 'Send feedback';
+}
+
 /* ==========================================================================
    HUD Controllers & Events
    ========================================================================== */
@@ -579,6 +783,7 @@ function setupPrompterHUDListeners() {
   DOM.hudBtnMirror.addEventListener('click', () => {
     const flipped = DOM.prompterTextBody.classList.toggle('flipped');
     DOM.hudBtnMirror.classList.toggle('active', flipped);
+    DOM.hudBtnMirror.setAttribute('aria-pressed', String(flipped));
     
     // Synced configuration back
     DOM.configMirrorMode.checked = flipped;
@@ -593,6 +798,7 @@ function setupPrompterHUDListeners() {
   DOM.hudBtnGuides.addEventListener('click', () => {
     const visible = DOM.focusZone.classList.toggle('visible');
     DOM.hudBtnGuides.classList.toggle('active', visible);
+    DOM.hudBtnGuides.setAttribute('aria-pressed', String(visible));
     
     DOM.configFocusOverlay.checked = visible;
     updateActiveScriptState('focusOverlay', visible);
@@ -698,6 +904,8 @@ function launchTeleprompter() {
   DOM.dashboardView.classList.add('hidden');
   DOM.dashboardView.classList.remove('active');
   DOM.prompterView.classList.add('active');
+  enterFullscreen();
+  requestWakeLock();
   
   // Reset scroll metrics
   DOM.prompterViewport.scrollTop = 0;
@@ -736,6 +944,7 @@ function exitTeleprompter() {
   // Stop engines
   state.isPlaying = false;
   stopVoiceEngine();
+  releaseWakeLock();
   
   // Switch Views
   DOM.prompterView.classList.remove('active');
@@ -806,10 +1015,12 @@ function togglePlayback() {
 function updateHUDButtonState() {
   if (state.isPlaying) {
     DOM.hudBtnPlay.classList.add('active');
+    DOM.hudBtnPlay.setAttribute('aria-label', 'Pause');
     DOM.hudSvgPlay.style.display = 'none';
     DOM.hudSvgPause.style.display = 'block';
   } else {
     DOM.hudBtnPlay.classList.remove('active');
+    DOM.hudBtnPlay.setAttribute('aria-label', 'Play');
     DOM.hudSvgPlay.style.display = 'block';
     DOM.hudSvgPause.style.display = 'none';
   }
@@ -828,11 +1039,12 @@ function getPrompterLayoutMetrics(script) {
     };
   }
 
+  const mobileFontScale = 0.8;
   const maxReadableFontSize = Math.max(28, Math.min(44, viewportWidth * 0.105));
   const maxReadableWidth = Math.max(280, viewportWidth - 32);
 
   return {
-    fontSize: Math.min(configuredFontSize, maxReadableFontSize),
+    fontSize: Math.min(configuredFontSize, maxReadableFontSize) * mobileFontScale,
     marginWidth: Math.min(configuredMarginWidth, maxReadableWidth)
   };
 }
@@ -845,12 +1057,15 @@ function applyPromptSizingConfigs(script) {
   if (script.mirrorMode) {
     DOM.prompterTextBody.classList.add('flipped');
     DOM.hudBtnMirror.classList.add('active');
+    DOM.hudBtnMirror.setAttribute('aria-pressed', 'true');
   } else {
     DOM.hudBtnMirror.classList.remove('active');
+    DOM.hudBtnMirror.setAttribute('aria-pressed', 'false');
   }
   
   DOM.focusZone.classList.toggle('visible', script.focusOverlay !== false);
   DOM.hudBtnGuides.classList.toggle('active', script.focusOverlay !== false);
+  DOM.hudBtnGuides.setAttribute('aria-pressed', String(script.focusOverlay !== false));
   
   // CSS dimensions applied
   const layoutMetrics = getPrompterLayoutMetrics(script);
@@ -1034,6 +1249,7 @@ function initSpeechRecognition() {
     console.warn("Speech Recognition API is not supported in this browser.");
     DOM.configVoiceScroll.disabled = true;
     DOM.configVoiceScroll.checked = false;
+    DOM.configAutoScroll.checked = true;
     if (DOM.containerVoiceScroll) {
       const voiceHelp = DOM.containerVoiceScroll.querySelector('.tooltip-help');
       const unsupportedMessage = 'Microphone speech tracking not supported in this browser. Use Chrome or Safari.';
@@ -1059,10 +1275,9 @@ function initSpeechRecognition() {
   rec.onerror = (event) => {
     console.error('Speech Recognition Error', event.error);
     if (event.error === 'not-allowed') {
-      showToast('Microphone access denied. Enable mic permissions.', 'error');
-      stopVoiceEngine();
+      fallbackToAutoScroll('Microphone denied. Auto-scroll started.');
     } else if (event.error === 'network') {
-      showToast('Speech Recognition requires an internet connection.', 'error');
+      fallbackToAutoScroll('Speech recognition needs internet. Auto-scroll started.');
     }
   };
   
@@ -1108,13 +1323,7 @@ function initSpeechRecognition() {
 
 function startVoiceEngine() {
   if (!state.recognition) {
-    showToast('Speech recognition not supported.', 'error');
-    state.scrollMode = 'auto';
-    state.isPlaying = true;
-    updateHUDButtonState();
-    DOM.configAutoScroll.checked = true;
-    DOM.configVoiceScroll.checked = false;
-    requestAnimationFrame(renderAutoScrollTicker);
+    fallbackToAutoScroll('Speech recognition not supported. Auto-scroll started.');
     return;
   }
   
@@ -1127,7 +1336,26 @@ function startVoiceEngine() {
     requestAnimationFrame(renderVoiceScrollTicker);
   } catch (err) {
     console.error('Voice engine start error', err);
+    fallbackToAutoScroll('Could not start microphone. Auto-scroll started.');
   }
+}
+
+function fallbackToAutoScroll(message) {
+  if (state.recognition && state.recognitionActive) {
+    stopVoiceEngine();
+  }
+
+  state.scrollMode = 'auto';
+  state.isPlaying = true;
+  DOM.configAutoScroll.checked = true;
+  DOM.configVoiceScroll.checked = false;
+  DOM.hudSpeedWrapper.style.display = 'flex';
+  DOM.hudVoiceText.textContent = 'Voice unavailable';
+  updateActiveScriptState('voiceScroll', false);
+  updateHUDButtonState();
+  state.lastTime = performance.now();
+  requestAnimationFrame(renderAutoScrollTicker);
+  showToast(message, 'error');
 }
 
 function stopVoiceEngine() {
@@ -1259,6 +1487,51 @@ function setupPanelResize() {
 
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
+  });
+}
+
+async function enterFullscreen() {
+  if (!document.fullscreenEnabled || document.fullscreenElement) return;
+
+  try {
+    await DOM.prompterView.requestFullscreen();
+  } catch (error) {
+    console.info('Fullscreen request skipped', error);
+  }
+}
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator) || state.wakeLock) return;
+
+  try {
+    state.wakeLock = await navigator.wakeLock.request('screen');
+    state.wakeLock.addEventListener('release', () => {
+      state.wakeLock = null;
+    });
+  } catch (error) {
+    console.info('Wake lock unavailable', error);
+  }
+}
+
+async function releaseWakeLock() {
+  if (!state.wakeLock) return;
+
+  try {
+    await state.wakeLock.release();
+  } catch (error) {
+    console.info('Wake lock release skipped', error);
+  } finally {
+    state.wakeLock = null;
+  }
+}
+
+function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(error => {
+      console.info('Service worker registration failed', error);
+    });
   });
 }
 

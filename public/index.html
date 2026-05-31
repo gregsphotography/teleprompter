@@ -56,6 +56,19 @@
             </svg>
             New Script
           </button>
+          <div class="sidebar-secondary-actions" aria-label="Script file actions">
+            <button id="btn-import-scripts" class="icon-action-btn" type="button" title="Import scripts" aria-label="Import scripts">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 20H5v-2h14v2zM13 4v8.17l2.59-2.58L17 11l-5 5-5-5 1.41-1.41L11 12.17V4h2z"/>
+              </svg>
+            </button>
+            <button id="btn-export-scripts" class="icon-action-btn" type="button" title="Export scripts" aria-label="Export scripts">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M19 20H5v-2h14v2zM13 16h-2V7.83L8.41 10.4 7 9l5-5 5 5-1.41 1.4L13 7.83V16z"/>
+              </svg>
+            </button>
+          </div>
+          <input id="script-import-file" class="visually-hidden" type="file" accept="application/json,.json">
         </div>
         
         <div class="scripts-list-title">My Scripts</div>
@@ -63,6 +76,7 @@
           <!-- Loaded dynamically from JS -->
         </div>
         <div class="sidebar-footer">
+          <button id="btn-feedback" class="sidebar-footer-button" type="button">Feedback</button>
           <a href="/imprint.html">Imprint</a>
           <a href="/privacy.html">Privacy</a>
           <a href="/cookie-policy.html">Cookies</a>
@@ -72,8 +86,15 @@
       <!-- Main Workspace (Editor & Configs) -->
       <main class="workspace">
         <header class="workspace-header">
-          <input type="text" id="script-title-field" class="script-title-input" value="Untitled Script" placeholder="Script Title">
+          <label class="visually-hidden" for="script-title-field">Script title</label>
+          <input type="text" id="script-title-field" class="script-title-input" value="Untitled Script" placeholder="Script Title" aria-label="Script title">
           <div class="workspace-actions">
+            <button id="btn-duplicate-script" class="btn btn-secondary btn-compact" type="button">
+              <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+                <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v12h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+              Duplicate
+            </button>
             <button id="btn-launch" class="btn btn-primary">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 2px;">
                 <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -87,7 +108,8 @@
           
           <!-- Script Content Editor -->
           <section class="editor-area">
-            <textarea id="script-editor-body" class="script-textarea" placeholder="Paste or type your script here..."></textarea>
+            <label class="visually-hidden" for="script-editor-body">Script body</label>
+            <textarea id="script-editor-body" class="script-textarea" placeholder="Paste or type your script here..." aria-label="Script body"></textarea>
             
             <div class="stats-bar">
               <div class="stat-item">Words: <span id="stat-words">0</span></div>
@@ -110,7 +132,7 @@
                     <span class="tooltip-help" tabindex="0" role="button" aria-label="Scrolls as you read aloud using speech recognition." data-tooltip="Scrolls as you read aloud using speech recognition.">?</span>
                   </span>
                   <label class="switch">
-                    <input type="checkbox" id="config-voice-scroll" checked>
+                    <input type="checkbox" id="config-voice-scroll" checked aria-label="Voice-Activated Scroll">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -118,7 +140,7 @@
                 <div class="switch-container" id="container-auto-scroll" style="margin-top: 8px;">
                   <span class="control-label">Auto-Scroll</span>
                   <label class="switch">
-                    <input type="checkbox" id="config-auto-scroll">
+                    <input type="checkbox" id="config-auto-scroll" aria-label="Auto-Scroll">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -129,7 +151,7 @@
                     <span class="tooltip-help" tabindex="0" role="button" aria-label="Begins scrolling as soon as prompter opens." data-tooltip="Begins scrolling as soon as prompter opens.">?</span>
                   </span>
                   <label class="switch">
-                    <input type="checkbox" id="config-auto-start" checked>
+                    <input type="checkbox" id="config-auto-start" checked aria-label="Start Immediately">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -143,7 +165,7 @@
                   <span>Reading Speed <span class="tooltip-help" tabindex="0" role="button" aria-label="Applies to auto-scroll. Adjustable inside the prompter." data-tooltip="Applies to auto-scroll. Adjustable inside the prompter.">?</span></span>
                   <span id="display-wpm" class="control-value">130 WPM</span>
                 </div>
-                <input type="range" id="config-wpm" min="50" max="300" step="5" value="130">
+                <input type="range" id="config-wpm" min="50" max="300" step="5" value="130" aria-label="Reading speed">
               </div>
             </div>
 
@@ -151,7 +173,7 @@
               <div class="section-title">Reader Interface</div>
               <div class="control-group">
                 <div class="control-label">Typography</div>
-                <select id="config-font-family">
+                <select id="config-font-family" aria-label="Typography">
                   <option value="sans" selected>Modern Sans-Serif (Inter)</option>
                   <option value="serif">Elegant Serif (Playfair)</option>
                   <option value="mono">Sleek Monospace (Fira Code)</option>
@@ -160,17 +182,17 @@
                 <div class="control-label" style="margin-top: 8px;">
                   Font Size <span id="display-font-size" class="control-value">42px</span>
                 </div>
-                <input type="range" id="config-font-size" min="24" max="80" step="2" value="42">
+                <input type="range" id="config-font-size" min="24" max="80" step="2" value="42" aria-label="Font size">
                 
                 <div class="control-label" style="margin-top: 8px;">
                   Line Height <span id="display-line-height" class="control-value">1.6x</span>
                 </div>
-                <input type="range" id="config-line-height" min="1.2" max="2.2" step="0.1" value="1.6">
+                <input type="range" id="config-line-height" min="1.2" max="2.2" step="0.1" value="1.6" aria-label="Line height">
 
                 <div class="control-label" style="margin-top: 8px;">
                   Reading Width <span id="display-margin-width" class="control-value">700px</span>
                 </div>
-                <input type="range" id="config-margin-width" min="400" max="1200" step="50" value="700">
+                <input type="range" id="config-margin-width" min="400" max="1200" step="50" value="700" aria-label="Reading width">
                 
                 <div class="control-label" style="margin-top: 16px; margin-bottom: 4px; font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px;">
                   Live Style Preview
@@ -192,7 +214,7 @@
                     <span class="tooltip-help" tabindex="0" role="button" aria-label="Replaces cyan cues with high-contrast yellow and underline markers." data-tooltip="Replaces cyan cues with high-contrast yellow and underline markers.">?</span>
                   </span>
                   <label class="switch">
-                    <input type="checkbox" id="config-colorblind-mode">
+                    <input type="checkbox" id="config-colorblind-mode" aria-label="Colourblind Mode">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -208,7 +230,7 @@
                     <span class="tooltip-help" tabindex="0" role="button" aria-label="Flips text horizontally for glass mirrors." data-tooltip="Flips text horizontally for glass mirrors.">?</span>
                   </span>
                   <label class="switch">
-                    <input type="checkbox" id="config-mirror-mode">
+                    <input type="checkbox" id="config-mirror-mode" aria-label="Mirror Mode">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -219,7 +241,7 @@
                     <span class="tooltip-help" tabindex="0" role="button" aria-label="Adds dynamic horizontal guidelines." data-tooltip="Adds dynamic horizontal guidelines.">?</span>
                   </span>
                   <label class="switch">
-                    <input type="checkbox" id="config-focus-overlay">
+                    <input type="checkbox" id="config-focus-overlay" aria-label="Focus Highlight Overlay">
                     <span class="slider"></span>
                   </label>
                 </div>
@@ -256,14 +278,14 @@
         <div class="hud-container">
           
           <!-- Back to editor button -->
-          <button id="hud-btn-back" class="hud-btn" title="Back to Editor (Esc)">
+          <button id="hud-btn-back" class="hud-btn" title="Back to Editor (Esc)" aria-label="Back to Editor">
             <svg viewBox="0 0 24 24">
               <path d="M19 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H19v-2z"/>
             </svg>
           </button>
 
           <!-- Restart from beginning button -->
-          <button id="hud-btn-restart" class="hud-btn" title="Restart from Beginning (R)">
+          <button id="hud-btn-restart" class="hud-btn" title="Restart from Beginning (R)" aria-label="Restart from Beginning">
             <svg viewBox="0 0 24 24">
               <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
             </svg>
@@ -272,7 +294,7 @@
           <div class="hud-divider"></div>
           
           <!-- Play / Pause button -->
-          <button id="hud-btn-play" class="hud-btn active" title="Play / Pause (Space)">
+          <button id="hud-btn-play" class="hud-btn active" title="Play / Pause (Space)" aria-label="Pause">
             <svg id="hud-svg-play" viewBox="0 0 24 24" style="display: none;">
               <path d="M8 5v14l11-7z"/>
             </svg>
@@ -283,13 +305,13 @@
           
           <!-- Speed display and controls -->
           <div class="hud-speed-control" id="hud-speed-wrapper">
-            <button id="hud-btn-slower" class="hud-btn" title="Slower (Down Arrow)">
+            <button id="hud-btn-slower" class="hud-btn" title="Slower (Down Arrow)" aria-label="Slower">
               <svg viewBox="0 0 24 24">
                 <path d="M19 13H5v-2h14v2z"/>
               </svg>
             </button>
             <div id="hud-speed-text" class="hud-speed-value">130 WPM</div>
-            <button id="hud-btn-faster" class="hud-btn" title="Faster (Up Arrow)">
+            <button id="hud-btn-faster" class="hud-btn" title="Faster (Up Arrow)" aria-label="Faster">
               <svg viewBox="0 0 24 24">
                 <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
               </svg>
@@ -305,14 +327,14 @@
           </div>
           
           <!-- Mirror Mode quick toggle -->
-          <button id="hud-btn-mirror" class="hud-btn" title="Toggle Mirror Mode (M)">
+          <button id="hud-btn-mirror" class="hud-btn" title="Toggle Mirror Mode (M)" aria-label="Toggle Mirror Mode" aria-pressed="false">
             <svg viewBox="0 0 24 24">
               <path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/>
             </svg>
           </button>
 
           <!-- Toggle guides -->
-          <button id="hud-btn-guides" class="hud-btn active" title="Toggle Guides (G)">
+          <button id="hud-btn-guides" class="hud-btn active" title="Toggle Guides (G)" aria-label="Toggle Guides" aria-pressed="true">
             <svg viewBox="0 0 24 24">
               <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
             </svg>
@@ -324,9 +346,54 @@
     </div>
     
     <!-- Status Toast Notifications -->
-    <div id="app-toast" class="toast">
+    <div id="app-toast" class="toast" role="status" aria-live="polite" aria-atomic="true">
       <div class="toast-icon"></div>
       <span id="toast-message">Notification</span>
+    </div>
+
+    <!-- Feedback Modal -->
+    <div id="feedback-modal" class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title" hidden>
+      <div id="feedback-backdrop" class="feedback-backdrop"></div>
+      <section class="feedback-dialog">
+        <header class="feedback-header">
+          <div>
+            <p class="feedback-kicker">AeroPrompter</p>
+            <h2 id="feedback-title">Send feedback</h2>
+          </div>
+          <button id="feedback-close" class="feedback-close" type="button" aria-label="Close feedback form">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M18.3 5.71 16.89 4.3 12 9.17 7.11 4.3 5.7 5.71 10.59 10.6 5.7 15.49l1.41 1.41L12 12.01l4.89 4.89 1.41-1.41-4.89-4.89 4.89-4.89z"/>
+            </svg>
+          </button>
+        </header>
+
+        <form id="feedback-form" class="feedback-form">
+          <div class="feedback-field">
+            <label for="feedback-name">Name</label>
+            <input id="feedback-name" name="name" type="text" autocomplete="name" maxlength="120" required>
+          </div>
+
+          <div class="feedback-field">
+            <label for="feedback-email">Email</label>
+            <input id="feedback-email" name="email" type="email" autocomplete="email" maxlength="254" required>
+          </div>
+
+          <div class="feedback-field">
+            <label for="feedback-message">Message</label>
+            <textarea id="feedback-message" name="message" rows="6" maxlength="4000" required></textarea>
+          </div>
+
+          <div class="feedback-honeypot" aria-hidden="true">
+            <label for="feedback-company">Company</label>
+            <input id="feedback-company" name="company" type="text" tabindex="-1" autocomplete="off">
+          </div>
+
+          <div class="feedback-actions">
+            <button id="feedback-cancel" class="btn btn-secondary btn-compact" type="button">Cancel</button>
+            <button id="feedback-submit" class="btn btn-primary btn-compact" type="submit">Send feedback</button>
+          </div>
+        </form>
+      </section>
     </div>
     
   </div>
